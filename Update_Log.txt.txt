@@ -1,0 +1,31 @@
+24th June 2023
+
+Cart – includes cart.method = “LATENT-BUDGET-TREE” 
+
+The creates a tree using latent budgets, utilising the rpy2 library and lba function in R. 
+Assessing returned alpha values greater than 0.5 and assigning the corresponding class to the left split. 
+
+Please note for the creation of the class element, an impurity function is still passed, 
+such as gini, and is used during display only. 
+
+Also latent budget tree is only available for classifier problems
+
+This takes the max_k (complete) top tau predictors to assess. Complete as in no error is returned from 
+the lba function: such as inversing non square matricies. This max_k parameter can be passed to the cart.growing_tree() function.
+
+I am confident in the tau calculations comparing with R GKtau library. 
+
+Also the cart.print_tree() function has been updated to include the percentages of all the classes in the nodes, 
+to see how it goes. The cart.print_tree() also takes hyperparameter table = True to return a pandas dataframe of 
+the information about the tree. This includes the alpha and beta parameters from the split but is a bit messy. 
+
+Please note this table is only available for latent budget tree at this time. 
+
+Also the print_tree() function takes html as a parameter that will open the graph in your browser and create a html
+ object in your directory. This was because in jupyter the graphs could be a bit small and hard to distinguish, 
+especially with increasing depth. 
+
+A quite weird thing, is as it is a classifier problem all observations are strings / objects for the predictors 
+and that if using pandas, for importing the data frame both training and test tests will need to have index’s starting at 0
+
+I have included my play dataset, which is Christians, and is the transport dataset and is attached. 
