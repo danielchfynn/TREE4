@@ -29,3 +29,67 @@ A quite weird thing, is as it is a classifier problem all observations are strin
 and that if using pandas, for importing the data frame both training and test tests will need to have index’s starting at 0
 
 I have included my play dataset, which is Christians, and is the transport dataset and is attached. 
+
+
+
+
+
+18/7/23
+
+combination_split
+included combination_split paramater in growing_tree - which will only work for lbt 
+
+This simple combines the groups for the top two tau. - and also works with max_k, so will iterate towards the the 2nd and 3rd highest ect. 
+
+FOr example distance and car_ownership make a new group distance*car_ownership
+where the classes (strings) are concatenated such as 
+car_ownership0 (a class in car ownershuip) + distance02
+would become car_onership0distance02.
+
+The prints are very busy, when there are a combination of many classes 
+
+I add the best split found from this to the list in cart, n_features, which can be accessed after class creation, for inspectoin. 
+
+
+Performed fixed for the node proportion total and gain, to make correct use of delta (the change in done deviance explained) as before it was cheated a bit. 
+
+At the moment, for regression it is calculated with sum {i node in leaves} (n|i* mean(y|i) -mean(y)**2)
+where n|i is the number in the ith node, and y|i are the y values in the ith node
+
+And for classification is the sum of the entropy in the leaves 
+
+Printing trees with table is available for all methods 
+
+
+
+Twoing
+Started to apply twoing algorithm
+Create eevry combination of the response variable 
+Reassign the y value for that 
+####AM using gini / entropy as the splitting choice metric for lbt instead of outputed ls
+also am using the actual gini/entropy in the results table for the j classes, not the c1,c2, classes
+Notice when running lbt using k = 1 is ok, as there are many errors from lba function when running this
+Min imp gain set at 1e-6, max level = 4, min class parent 1000, min class child 500 
+Also implemented table visuals 
+
+ALso implemented table visuals for use with cart, fast and twostage, all are considerably slower than lba.
+
+
+Twoing Regression
+Taking the set of each value in the y values in the node (starting with root)
+iterate through each value in the set, and calculate the between variance of the groups, 
+c1 is for each value < the max between variance, c2 otherwise
+change the cart setting into classifier settings with appropiate impur_fn
+send this all to the node_search_split and apply required method either cart, fast, two-stage /lbt 
+	have only ran fast so far 
+	also works cart
+	also for lbt
+iterate this process
+
+created image to show how the code works for twoing for both class and reg
+
+
+
+attempts made with visual pruning but not fruitful. Attempting first to have the same lebgths, but continually had crossing branches. May have to implement a plotting algorithm for this. 
+
+we can use node prop gains for the length of the branches (in some way) 
