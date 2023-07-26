@@ -10,7 +10,7 @@ Igraph Version: 0.10.3
 Plotly Version: 5.12.0
 Pandas Version: 1.4.4
 Rpy2 Version: 3.5.12
-
+Scikit-learn Version: 1.1.3
 
 R Dependencies 
 Base Version 4.2.2
