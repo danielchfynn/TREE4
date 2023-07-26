@@ -3,12 +3,12 @@
 #check if between variance is ok, swap for deviance
 #speed up multiprocessing or joblib 
 
-import itertools
-import math
+import itertools #base library
+import math #base library
 import numpy as np # use numpy arraysfrom
-from  statistics import mean,variance,mode
+from  statistics import mean,variance,mode #base library
 from anytree import Node, RenderTree, NodeMixin
-from collections import Counter
+from collections import Counter #base library
 import matplotlib.pyplot as plt
 #from anytree.exporter import DotExporter
 #from anytree.dotexport import RenderTreeGraph
@@ -17,13 +17,13 @@ import pydot
 from igraph import Graph, EdgeSeq
 import plotly.graph_objects as go
 #from pygments import highlight
-import webbrowser
+import webbrowser #base library 
 
 
-import random
+import random #base library 
 import pandas as pd
-import gc
-import time
+import gc #base library 
+import time #base library 
 
 #rpy2 objects for lba
 import rpy2
@@ -436,9 +436,10 @@ class CART:
             wss = 0 
             for i in list(set(df[var])):
                 df2 = df.loc[df[var]==i]
-                mean_y = mean(df2["y"])
-                for j in range(len(df2["y"])):
-                    wss += (df2["y"].iloc[j] - mean_y)**2
+                if len(df2["y"]) > 1: #there is only a within, when theres more than 1, otherwise its 0 
+                    mean_y = mean(df2["y"])
+                    for j in range(len(df2["y"])):
+                        wss += (df2["y"].iloc[j] - mean_y)**2
             pearson_list.append((1- wss/ tss, var))
 
         pearson_list.sort(reverse = True)
@@ -462,6 +463,7 @@ class CART:
         variables=[]
         distinct_values=np.array([])
         t=0
+        k = False
         
         node.set_features(self.features)
         if Counter(self.y[node.indexes]).most_common(1)[0][1] == len(self.y[node.indexes]):
@@ -605,57 +607,83 @@ class CART:
                         continue
 
             if self.method == "FAST" or self.method == "TWO-STAGE":
-                    
-                    if self.problem == "classifier":
-                        ordered_list = self.tau_ordering(node)  
+                if self.problem == "classifier":
+                    ordered_list = self.tau_ordering(node)  
+                else:
+                    ordered_list = self.pearson_ordering(node) 
+                #print("ordered_list",ordered_list)
+                k = 0 #iterator 
+                while k < len(ordered_list):       #stopping rule 
+                    between_variance=[]
+                    splits=[]
+                    variables=[]
+                    if ordered_list[k][1] in self.n_features_names:
+                        cat_var = [ordered_list[k][1]]
+                        num_var = []
                     else:
-                        ordered_list = self.pearson_ordering(node) 
-                    #print("ordered_list",ordered_list)
+                        num_var = [ordered_list[k][1]]
+                        cat_var = []
+                    for var in cat_var:  
+                        #df = pd.DataFrame(self.n_features[str(var)])
+                        #print("combinations", var, list(set(self.n_features[str(var)])), "nan" in list(set(self.n_features[str(var)])))
+                        #if not df[str(var)].isnull().values.any(): 
+                        combinazioni = []
+                        distinct_values= []
+                        distinct_values.append(list(set(self.n_features[str(var)])))
+                        distinct_values = list(itertools.chain(*distinct_values)) #flattens, removed nesting
+                        for i in range(1,len(distinct_values)):
+                            combinazioni.append(list(itertools.combinations(distinct_values, i)))
+                        combinazioni=combinazioni[1:]
+                        combinazioni = list(itertools.chain(*combinazioni))
+                        combinazioni = combinazioni +  distinct_values
+                        #TODO put everything as nested list?
+                        '''  new_comb = []
+                            for i in combinazioni:
+                                try:
+                                    if len(list(i))>1:
+                                        small_combs = []
+                                        for j in range(len(i)):
+                                            small_combs.append(i[j])
+                                        new_comb.append(small_combs)
+                                except:
+                                    new_comb.append([i])
+                        '''
+                        for i in combinazioni: 
+                            stump = node.bin_split(self.features, self.n_features, str(var),i)
+                            if self.y[stump[0].indexes].size >= self.grow_rules['min_cases_child'] \
+                                and self.y[stump[1].indexes].size >= self.grow_rules['min_cases_child']:
+                                impur0 = self.impur(stump[0])
+                                impur1 = self.impur(stump[1])
+                                if self.problem == 'classifier' and self.impurity_fn == "tau":    
+                                    gini_parent = self.impur(node)
+                                    tau = (impur0 * len(stump[0].indexes) / len(node.indexes) + impur1 * len(stump[1].indexes)/ len(node.indexes) - gini_parent) / (1- gini_parent)
+                                    between_variance.append(tau)
+                                elif self.problem == "regression" and self.impurity_fn == "pearson": 
+                                    impurities_1.append(impur0)
+                                    impurities_1.append(impur1)
+                                    between_variance.append(1- sum(impurities_1[t:]) / self.tss(node)) #exploratory slides 43
+                                else:
+                                    print("Error, Two-Stage and FAST algorithm require impurity_fn as tau for classifier, \
+                                          and pearson for regression")
+                                    return None
+                                splits.append(i)
+                                variables.append(str(var))
+                                t+=2
+                            else:
+                                continue
+                        #else:
+                        #    print("NaN found in observation")
+                        #    continue            
 
-                    k = 0 #iterator 
-                    while k < len(ordered_list):       #stopping rule 
-                        between_variance=[]
-                        splits=[]
-                        variables=[]
+                        
+                    for var in num_var:
+                        #df = pd.DataFrame(self.features[str(var)])
+                        #if not df[str(var)].isnull().values.any():  
 
-                        if ordered_list[k][1] in self.n_features_names:
-                            cat_var = [ordered_list[k][1]]
-                            num_var = []
-                        else:
-                            num_var = [ordered_list[k][1]]
-                            cat_var = []
-
-                        for var in cat_var:  
-
-                            combinazioni = []
-                            distinct_values= []
-                            distinct_values.append(list(set(self.n_features[str(var)])))
-                            distinct_values = list(itertools.chain(*distinct_values)) #flattens, removed nesting
-                            for i in range(1,len(distinct_values)):
-                                combinazioni.append(list(itertools.combinations(distinct_values, i)))
-                            combinazioni=combinazioni[1:]
-                            combinazioni = list(itertools.chain(*combinazioni))
-                            combinazioni = combinazioni +  distinct_values
-                            
-                            #TODO put everything as nested list?
-                            '''  new_comb = []
-                                for i in combinazioni:
-                                    try:
-                                        if len(list(i))>1:
-
-                                            small_combs = []
-                                            for j in range(len(i)):
-                                                small_combs.append(i[j])
-                                            new_comb.append(small_combs)
-                                    except:
-                                        new_comb.append([i])
-                            '''
-
-                            for i in combinazioni: 
-                                stump = node.bin_split(self.features, self.n_features, str(var),i)
+                        for i in range(len(self.features[str(var)])): #TODO should be set
+                                stump = node.bin_split(self.features, self.n_features, str(var),self.features[str(var)][i])
                                 if self.y[stump[0].indexes].size >= self.grow_rules['min_cases_child'] \
                                     and self.y[stump[1].indexes].size >= self.grow_rules['min_cases_child']:
-                                    
                                     impur0 = self.impur(stump[0])
                                     impur1 = self.impur(stump[1])
                                     if self.problem == 'classifier' and self.impurity_fn == "tau":    
@@ -665,94 +693,62 @@ class CART:
                                     elif self.problem == "regression" and self.impurity_fn == "pearson": 
                                         impurities_1.append(impur0)
                                         impurities_1.append(impur1)
-                                        between_variance.append(1- sum(impurities_1[t:]) / self.tss(node)) #exploratory slides 43
+                                        between_variance.append(1- sum(impurities_1[t:])/ self.tss(node))
                                     else:
                                         print("Error, Two-Stage and FAST algorithm require impurity_fn as tau for classifier, \
-                                              and pearson for regression")
+                                          and pearson for regression")
                                         return None
-                                    splits.append(i)
+                                    splits.append(self.features[str(var)][i])
                                     variables.append(str(var))
                                     t+=2
-                            else:
-                                continue
-                    
-                        for var in num_var:    
-                            for i in range(len(self.features[str(var)])):
-                                    stump = node.bin_split(self.features, self.n_features, str(var),self.features[str(var)][i])
-                                    if self.y[stump[0].indexes].size >= self.grow_rules['min_cases_child'] \
-                                        and self.y[stump[1].indexes].size >= self.grow_rules['min_cases_child']:
-                                        
-                                        impur0 = self.impur(stump[0])
-                                        impur1 = self.impur(stump[1])
-                                        
-                                        if self.problem == 'classifier' and self.impurity_fn == "tau":    
-                                            gini_parent = self.impur(node)
-                                            tau = (impur0 * len(stump[0].indexes) / len(node.indexes) + impur1 * len(stump[1].indexes)/ len(node.indexes) - gini_parent) / (1- gini_parent)
-                                            between_variance.append(tau)
-                                        elif self.problem == "regression" and self.impurity_fn == "pearson": 
-                                            impurities_1.append(impur0)
-                                            impurities_1.append(impur1)
-                                            between_variance.append(1- sum(impurities_1[t:])/ self.tss(node))
-                                        
-                                        else:
-                                            print("Error, Two-Stage and FAST algorithm require impurity_fn as tau for classifier, \
-                                              and pearson for regression")
-                                            return None
-                                        splits.append(self.features[str(var)][i])
-                                        variables.append(str(var))
-                                        t+=2
-                                    else: 
-                                        continue
-
-                        try:                  
-                            if k == 0:
-                                s_star_k = max(between_variance)  
-                                s_star_k_between = between_variance[between_variance.index(max(between_variance))] 
-                                s_star_k_split = splits[between_variance.index(max(between_variance))]
-                                s_star_k_variables = variables[between_variance.index(max(between_variance))]
-                                if self.method == "TWO-STAGE" and max_k == 1:                              
-                                    return s_star_k_variables, s_star_k_split, s_star_k_between
-                        except:
-                            k += 1
-                            s_star_k = 0
-                            continue
-
-
-
-                        try:
-                            if k != 0 and max(between_variance) > s_star_k:
-                                s_star_k = max(between_variance) 
-                                s_star_k_between = between_variance[between_variance.index(max(between_variance))]
-                                s_star_k_split = splits[between_variance.index(max(between_variance))]
-                                s_star_k_variables = variables[between_variance.index(max(between_variance))]
-                        except: 
-                            k +=1 #failing minimum child size condition
-                            continue
-                        
-                        
-                        if self.method == "TWO-STAGE":
-                            if max_k == 1:         ##if initial iteration fails to get a result  #len(s_star_k_between) == 1 had previous, but to get to this point cant have error
+                                else: 
+                                    continue
+                        #else:
+                        #    print("NaN found in observation")
+                        #    continue 
+                    try:                  
+                        if k == 0:
+                            s_star_k = max(between_variance)  
+                            s_star_k_between = between_variance[between_variance.index(max(between_variance))] 
+                            s_star_k_split = splits[between_variance.index(max(between_variance))]
+                            s_star_k_variables = variables[between_variance.index(max(between_variance))]
+                            if self.method == "TWO-STAGE" and max_k == 1:                              
                                 return s_star_k_variables, s_star_k_split, s_star_k_between
-                            elif k >= max_k-1:
-                                return s_star_k_variables, s_star_k_split, s_star_k_between
-                            else:
-                                k +=1
-
-
-                        if self.method == "FAST":
-                            if s_star_k < ordered_list[k+1][0] :  #termination for FAST algoirthm
-                                k += 1               #only for operation of iteration 
-                            else:
-                                return s_star_k_variables, s_star_k_split, s_star_k_between
-                        
-
-                    
-                    
-                    try:
-                        return s_star_k_variables, s_star_k_split, s_star_k_between #if all fails after all variables 
                     except:
-                        return None
-            
+                        k += 1
+                        s_star_k = 0
+                        continue
+                    try:
+                        if k != 0 and max(between_variance) > s_star_k:
+                            s_star_k = max(between_variance) 
+                            s_star_k_between = between_variance[between_variance.index(max(between_variance))]
+                            s_star_k_split = splits[between_variance.index(max(between_variance))]
+                            s_star_k_variables = variables[between_variance.index(max(between_variance))]
+                    except: 
+                        k +=1 #failing minimum child size condition
+                        continue
+                    
+                    
+                    if self.method == "TWO-STAGE":
+                        if max_k == 1:         ##if initial iteration fails to get a result  #len(s_star_k_between) == 1 had previous, but to get to this point cant have error
+                            return s_star_k_variables, s_star_k_split, s_star_k_between
+                        elif k >= max_k-1:
+                            return s_star_k_variables, s_star_k_split, s_star_k_between
+                        else:
+                            k +=1
+                    if self.method == "FAST":
+                        if s_star_k < ordered_list[k+1][0] :  #termination for FAST algoirthm
+                            k += 1               #only for operation of iteration 
+                        else:
+                            return s_star_k_variables, s_star_k_split, s_star_k_between
+                    
+                
+                
+                try:
+                    return s_star_k_variables, s_star_k_split, s_star_k_between #if all fails after all variables 
+                except:
+                    return None
+        
 
             #had issues with having a boolean predictor 
             elif self.method == "CART":
@@ -823,7 +819,8 @@ class CART:
                                 t+=2
                             else: 
                                 continue
-     
+            else:
+                print("Method given is not included")
         try:
             #print("max",max(between_variance))
             return variables[between_variance.index(max(between_variance))],splits[between_variance.index(max(between_variance))],between_variance[between_variance.index(max(between_variance))]
@@ -905,7 +902,7 @@ class CART:
         mini_tree = [] 
 
         level = node.get_level()
-        print("level",level)
+        #print("level",level)
         if level > self.max_level:
             return None 
 
@@ -2535,11 +2532,12 @@ def adaboost(df, feature_var, num_var, cat_var, _problem, impur_fn,  method = "C
     first = True                    #checks whether it is the first iteration (weights = 1/n)
     iterations = 0
     best_weak =[]                   #adds the best weak learnings to a list 
-    final_predictions = pd.DataFrame(df[feature_var])
+    final_predictions = pd.DataFrame(df[feature_var]) #feature_var is the first missing variable
 
     while iterations < weak_learners:
         iterations +=1
         print("\nIteration",iterations)
+        #print("nan in complete df: ",df.isna().sum().sum())
 
         if not first:
             df = update_weights(df, alpha, overall_errors[best_index]) 
@@ -2558,10 +2556,11 @@ def adaboost(df, feature_var, num_var, cat_var, _problem, impur_fn,  method = "C
         
         weak_learner = []
         overall_errors =[]
-
-        for i in X.columns:
+        '''
+        for i in X.columns: #must have assumed weak learner only used 1 variable at a time
             print("feature: ",i)
             
+            #maybe only makes sense for depth one not depth 3
             if i in num_var:                  #To ensure only one variable is measured
                 X_cat_1 = []
                 cat_var_1 =[]                 #removing other variable type
@@ -2586,18 +2585,33 @@ def adaboost(df, feature_var, num_var, cat_var, _problem, impur_fn,  method = "C
             if pure:                                    #issues in running CART with an inseperable dataset - aka already pure 
                 print("parent node is pure, requires at least some stratification to be processed by CART")
                 break
- 
             my_tree = MyNodeClass('n1', np.arange(len(y)))
-            model = CART(y, X_num_1, num_var_1, X_cat_1, cat_var_1, impurity_fn = impur_fn, problem = _problem, method = "CART", max_level = max_level, min_cases_parent= 5,min_cases_child= 2) ##TODO can try to get fast to work
+            model = CART(y, X_num_1, num_var_1, X_cat_1, cat_var_1, impurity_fn = impur_fn, problem = _problem, method = method, max_level = max_level, min_cases_parent= 5,min_cases_child= 2) ##TODO can try to get fast to work
             model.growing_tree(my_tree)
             prediction_fn(model, y, X_num_1, num_var_1, X_cat_1, cat_var_1)
             overall_errors.append(error_checker(model, y_list, _problem))
+        '''
+
+        num_var_1 = num_var.copy()
+        cat_var_1 = cat_var.copy()
+        if feature_var in num_var:
+            num_var_1.remove(feature_var)
+        elif feature_var in cat_var:
+            cat_var_1.remove(feature_var)
 
 
-            if _problem == "regression":                    
-                weak_learner.append([model.prediction_reg[:len(y)], model.get_all_node(), model.get_leaf(), model])  
-            else:
-                weak_learner.append([model.prediction_cat[:len(y)], model.get_all_node(), model.get_leaf(), model])
+        my_tree = MyNodeClass('n1', np.arange(len(y)))
+        model = CART(y, X_num, num_var_1, X_cat, cat_var_1, impurity_fn = impur_fn, problem = _problem, method = method, max_level = max_level, min_cases_parent= 5,min_cases_child= 2) ##TODO can try to get fast to work
+        model.growing_tree(my_tree)
+        prediction_fn(model, y, X_num, num_var_1, X_cat, cat_var_1)
+        overall_errors.append(error_checker(model, y_list, _problem))
+        
+        
+        
+        if _problem == "regression":                    
+            weak_learner.append([model.prediction_reg[:len(y)], model.get_all_node(), model.get_leaf(), model])  
+        else:
+            weak_learner.append([model.prediction_cat[:len(y)], model.get_all_node(), model.get_leaf(), model])
 
         
         error_metric = []
@@ -2619,13 +2633,13 @@ def adaboost(df, feature_var, num_var, cat_var, _problem, impur_fn,  method = "C
  
 
         #clearing memory items
-        del y
-        del X_cat
-        del X_cat_1
-        del X_num
-        del X_num_1
-        del X
-        gc.collect()
+        #del y
+        #del X_cat
+        #del X_cat_1
+        #del X_num
+        #del X_num_1
+        #del X
+        #gc.collect()
 
 
     final_model =[]
@@ -2640,9 +2654,9 @@ def adaboost(df, feature_var, num_var, cat_var, _problem, impur_fn,  method = "C
     final_e = final_error(y_list, final_predictions, _problem)
 
     if _problem == "classifier":
-        print("Final Missclassification", sum(final_e), "\n")
+        print("Final Training Missclassification", sum(final_e), "\n")
     else:
-        print("Final MSE", round(sum(final_e),2), "\n")
+        print("Final Training MSE", round(sum(final_e),2), "\n")
 
     return {"final_model":final_model, "models":models}
 
@@ -2664,12 +2678,15 @@ def test_prediction(y_test, models, num_var, cat_var, X_test_num, X_test_cat, _p
                         new.append(X_test_num[name])#used to have [j] index notation, but these are signle predictions
 
                     for n_name in cat_var:
-                        new_n.append(X_test_cat[n_name])        
+                        new_n.append(str(X_test_cat[n_name])) #TODO added str?        
 
                     d = dict(zip(num_var, new))
                     dn = dict(zip(cat_var, new_n))
                     d.update(dn)
-                                    
+                    
+
+                    #print("sample", dn)
+      
                     model.pred_x(node, d, model.get_all_node(), model.get_leaf()) #appending to a list in cart 
         
         if _problem == "classifier":
@@ -2681,7 +2698,7 @@ def test_prediction(y_test, models, num_var, cat_var, X_test_num, X_test_cat, _p
 
     test_predictions = vote(y_test, test_predictions, _problem)
 
-    print("test prediction", test_predictions["final_pred"] )
+    print("Prediction", test_predictions["final_pred"][0] )
 
     return test_predictions["final_pred"] 
 
@@ -2725,7 +2742,7 @@ def  prediction_fn(model, y, X_num_1, num_var_1, X_cat_1, cat_var_1):
                 new = []
                 new_n = []            
 
-                if num_var_1:               #checking if empty 
+                if num_var_1:               #was checking if empty , now getting ith observation for pred
                     for name in num_var_1:
                         new.append(X_num_1[name][i])
 
@@ -2754,9 +2771,9 @@ def error_checker(model, y_list, _problem):
                     errors.append(False)
         
         if _problem == "regression":
-            print("mse", round(sum(errors),2))
+            print("training mse", round(sum(errors),2))
         else:
-            print("missclassifications", sum(errors))
+            print("training missclassifications", sum(errors))
         
     else:
         print("THERE MAY BE AN ISSUE")
@@ -2944,25 +2961,22 @@ def feature_variable(df2, row_no):
 
 def imputation_process(df2, feature_var, row_no, pos, num_var, bin_var, class_var, weak_learners, old_model="",  previous_var= ""):
 
-
-    complete_df = df2.iloc[0:row_no]  #subset only the complete dataset
-    complete_df.reset_index(drop = True, inplace = True)                       
+    complete_df = df2.iloc[0:row_no].copy()  #subset only the complete dataset
+    complete_df.reset_index(drop = True, inplace = True)  
     X = complete_df.drop(feature_var, axis = 1)
-    
     cat_var = bin_var + class_var
-
-
     #As a temporary fix for multiple missing values, will use mean imputation for a secondary, tertiary etc missing value temporarily 
     prediction_feat = df2.iloc[row_no].copy()
+    #print("prediction_feat2\n",prediction_feat)
     prediction_feat.drop(feature_var, inplace = True)
     
     for series_name in X.columns:                                  
         if checkNaN(prediction_feat[series_name]):
             if series_name in cat_var:
-                prediction_feat[series_name] = round(mean(df2[series_name].notna()),0) #TODO what??
-                print("prediction_feat", round(mean(df2[series_name].notna()),0))
+                prediction_feat[series_name] = Counter(X[series_name][X[series_name].notna()]).most_common(1)[0][0] 
+                #print("prediction_feat", series_name ,Counter(X[series_name][X[series_name].notna()]).most_common(1)[0][0])
             else:
-                prediction_feat[series_name] = round(mean(df2[series_name].notna()),0)
+                prediction_feat[series_name] = round(mean(X[series_name][X[series_name].notna()]),0)
 
 
     y_test = [1] #one element list, as test is for prediction 
@@ -2980,7 +2994,7 @@ def imputation_process(df2, feature_var, row_no, pos, num_var, bin_var, class_va
         cat_var_1 = cat_var.copy()
         cat_var_1.remove(feature_var) 
     else:
-        print("Hello error", feature_var, num_var, cat_var)
+        print("Variable Error", feature_var, num_var, cat_var)
 
     X_test_num = prediction_feat[num_var_1]  
     X_test_cat = prediction_feat[cat_var_1] 
@@ -2990,7 +3004,7 @@ def imputation_process(df2, feature_var, row_no, pos, num_var, bin_var, class_va
     if feature_var in num_var_full:
         if feature_var != previous_var:
             #don't think it matters if i pass num_var_full or num_var as there is filtering later 
-            model = adaboost(df = complete_df, feature_var = feature_var, num_var = num_var, cat_var = cat_var,_problem =  "regression", weak_learners = weak_learners, impur_fn = "between_variance")  
+            model = adaboost(df = complete_df, feature_var = feature_var, num_var = num_var, cat_var = cat_var,_problem =  "regression", weak_learners = weak_learners, impur_fn = "pearson", method = "FAST")  
             yhat = test_prediction(y_test, model["models"], num_var_1, cat_var_1, X_test_num, X_test_cat, _problem =  "regression") 
         else:
             yhat = test_prediction(y_test, old_model["models"], num_var_1, cat_var_1, X_test_num, X_test_cat,"regression")
@@ -2998,7 +3012,7 @@ def imputation_process(df2, feature_var, row_no, pos, num_var, bin_var, class_va
     
     elif feature_var in bin_var:
         if feature_var != previous_var:
-            model = adaboost(df = complete_df, feature_var = feature_var, num_var = num_var, cat_var = cat_var,_problem =  "classifier", weak_learners = weak_learners, impur_fn = "gini") ##does it need test set passed 
+            model = adaboost(df = complete_df, feature_var = feature_var, num_var = num_var, cat_var = cat_var,_problem =  "classifier", weak_learners = weak_learners, impur_fn = "tau", method = "FAST") ##does it need test set passed 
             yhat = test_prediction(y_test, model["models"], num_var_1, cat_var_1, X_test_num, X_test_cat,_problem =  "classifier")
         else:
             yhat = test_prediction(y_test, old_model["models"], num_var_1, cat_var_1, X_test_num, X_test_cat, _problem =  "classifier")
@@ -3006,7 +3020,7 @@ def imputation_process(df2, feature_var, row_no, pos, num_var, bin_var, class_va
 
     elif feature_var in class_var:
         if feature_var != previous_var:
-            model = adaboost(df = complete_df, feature_var = feature_var, num_var = num_var, cat_var = cat_var,_problem =  "classifier", weak_learners = weak_learners, impur_fn = "gini", max_level = 3)  
+            model = adaboost(df = complete_df, feature_var = feature_var, num_var = num_var, cat_var = cat_var,_problem =  "classifier", weak_learners = weak_learners, impur_fn = "tau",method = "FAST", max_level = 3)  
             yhat = test_prediction(y_test, model["models"], num_var_1, cat_var_1, X_test_num, X_test_cat, _problem =  "classifier")
         else:
             yhat = test_prediction(y_test, old_model["models"], num_var_1, cat_var_1, X_test_num, X_test_cat, _problem =  "classifier")
@@ -3062,7 +3076,7 @@ def binpi_imputation(df2,column_vect, num_var, bin_var, class_var, weak_learners
 
         #feature_var, pos = feature_variable(df2, row_no)
 
-        print("Feature Variable: ", feature_var)
+        print("\nFeature Variable: ", feature_var, "\nMissing Values: ", df2.isna().sum().sum())
 
         if iteration >1:
             model_1, previous_var_1 = imputation_process(df2, feature_var, row_no, pos,  num_var, bin_var, class_var, weak_learners, old_model,  previous_var)

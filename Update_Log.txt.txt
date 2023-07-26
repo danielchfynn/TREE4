@@ -93,3 +93,6 @@ created image to show how the code works for twoing for both class and reg
 attempts made with visual pruning but not fruitful. Attempting first to have the same lebgths, but continually had crossing branches. May have to implement a plotting algorithm for this. 
 
 we can use node prop gains for the length of the branches (in some way) 
+
+26/7/23
+Have done a bit more tweaking to the binpi methods, found some inconsistencies. Have also a new run sheet using the cdc heart disease data set bimi_applied_heart. performed comparison between cart libary bimpi imputation with fast, and using sklearn adaboost function. 
