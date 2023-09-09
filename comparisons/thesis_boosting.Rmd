@@ -1,0 +1,99 @@
+---
+title: "thesis_boosting"
+author: "Daniel Fynn"
+date: "2023-08-16"
+output: html_document
+---
+
+boosting model 
+
+each tree is grown using info from past tree 
+uses a modified version of original dataset
+
+fit a decision tree to the residuals 
+to updaye residuals 
+
+```{r}
+carseats_train = read.csv("Carseats_train.csv")
+carseats_train = subset(carseats_train, select = -X )
+
+carseats_train$ShelveLoc = as.factor(carseats_train$ShelveLoc)
+carseats_train$US = as.factor(carseats_train$US)
+carseats_train$Urban = as.factor(carseats_train$Urban)
+
+
+carseats_test = read.csv("Carseats_test.csv")
+carseats_test = subset(carseats_test, select = -X )
+
+carseats_test$ShelveLoc = as.factor(carseats_test$ShelveLoc)
+carseats_test$US = as.factor(carseats_test$US)
+carseats_test$Urban = as.factor(carseats_test$Urban)
+
+```
+
+library(gmb)
+
+```{r}
+
+seq1 = seq(from = 0.0, to = 0.005, length.out = 13)
+seq1
+```
+
+
+
+```{r}
+library(gbm)
+
+for (i in seq1){
+set.seed (1)
+boost.carseats =gbm(Price~.,data=carseats_train, distribution= "gaussian",n.trees =5000 , interaction.depth =4, shrinkage = i)
+yhat.boost=predict (boost.carseats ,newdata =carseats_test,n.trees =5000)
+print(mean(( yhat.boost -carseats_test$Price)^2))
+
+
+#summary (boost.carseats )
+}
+```
+shrinkage value that have best mse is 0.0029166667, so learns very slowly
+
+```{r}
+
+set.seed (1)
+boost.carseats =gbm(Price~.,data=carseats_train, distribution= "gaussian",n.trees =5000 , interaction.depth =4, shrinkage = 0.0029166667)
+yhat.boost=predict (boost.carseats ,newdata =carseats_test,n.trees =5000)
+print(mean(( yhat.boost -carseats_test$Price)^2))
+summary (boost.carseats )
+
+```
+
+
+
+
+partial dependence 
+```{r}
+par(mfrow =c(1,2))
+plot(boost.carseats ,i="CompPrice")
+plot(boost.carseats ,i="Sales")
+```
+
+
+
+will do boosting model on whole dataset 
+
+```{r}
+library("ISLR")
+data(Carseats)
+
+
+set.seed (1)
+boost.carseats =gbm(Price~.,data=Carseats, distribution= "gaussian",n.trees =5000 , interaction.depth =4, shrinkage = 0.0029166667)
+yhat.boost=predict (boost.carseats ,newdata =Carseats,n.trees =5000)
+print(mean(( yhat.boost -Carseats$Price)^2))
+
+summary (boost.carseats )
+
+```
+
+
+
+

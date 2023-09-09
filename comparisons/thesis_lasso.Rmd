@@ -1,0 +1,100 @@
+---
+title: "thesis_lasso"
+author: "Daniel Fynn"
+date: "2023-08-13"
+output: html_document
+---
+
+intro to stats pg 267
+glmnet() function , alpha = 1
+
+Is a shrinkage method
+contains all p predictors, but constrains or reguarizes the coefficient estimates, or pushes towards zero
+uses least squares estimate shrinking rss, but also a tuning parameter lambda that penalises 
+kambda = 0 gives ls estimate 
+
+```{r}
+carseats_train = read.csv("Carseats_train.csv")
+
+carseats_train = subset(carseats_train, select = -X )
+
+
+x_train=model.matrix (Price ~.,carseats_train )[,-1]
+y_train=carseats_train$Price
+```
+
+standardize = FALSE will stop having variables on the same scale 
+needs to be same as with ridge regression, coefficients can be affected by scaling
+
+ridge regression flexibility decreases as lambda increases
+
+lasso overcomes the disadvantage of ridge regression, where it cant set coefficients to zero. 
+uses l1 penalty not l2
+performs variable selection
+
+###################################
+```{r}
+library(glmnet)
+grid =10^ seq(10,-2, length =100)
+
+```
+###########################################
+
+
+ridge regressuib: small lambda high l2
+
+
+
+```{r}
+carseats_test = read.csv("Carseats_test.csv")
+
+carseats_test = subset(carseats_test, select = -X )
+
+
+x_test=model.matrix (Price ~.,carseats_test )[,-1]
+y_test=carseats_test$Price
+```
+
+
+
+
+
+```{r}
+lasso.mod =glmnet (x_train,y_train,alpha =1, lambda =grid , thresh =1e-12)
+plot(lasso.mod)
+```
+
+
+
+
+```{r}
+set.seed (1)
+cv.out =cv.glmnet (x_train,y_train,alpha =1)
+plot(cv.out)
+bestlam =cv.out$lambda.min
+bestlam
+lasso.pred=predict (lasso.mod ,s=bestlam ,newx=x_test)
+mean(( lasso.pred -y_test)^2)
+
+```
+```{r}
+library("ISLR")
+data(Carseats)
+x = model.matrix (Price ~.,Carseats )[,-1]
+y = Carseats$Price
+```
+
+
+
+
+
+```{r}
+out=glmnet (x,y,alpha =1, lambda =grid)
+lasso.coef=predict (out ,type ="coefficients",s=bestlam )
+lasso.coef
+```
+
+
+
+
+

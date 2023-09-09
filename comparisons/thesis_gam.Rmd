@@ -1,0 +1,205 @@
+---
+title: "thesis_gam"
+author: "Daniel Fynn"
+date: "2023-08-14"
+output: html_document
+---
+
+Generalised Additive Model 
+pg 297 into to stat
+
+extension on simple linear regression 
+allows non-linear functions of each variable while maintaining additivity 
+allowing qualitative and quantitative responses 
+splines can bse constructed usuing an appropiately chosen basis fn. 
+
+using smoothing spines for predicytors doesnt allow for least squares 
+
+
+gam() fn can be used with smooting splines using backfitting
+
+only additive though multiplicative variable and multi-variate funtional can e added to design matrix 
+```{r}
+
+library(gam)
+
+```
+
+s() part of gam, as a smoothign spline
+splines use coefficients matching different regions of the predictor 
+natural spline - linear at the boundary
+
+ns(X,df) degrees of freedom for knots
+
+
+```{r}
+carseats_train = read.csv("Carseats_train.csv")
+
+carseats_train = subset(carseats_train, select = -X )
+
+carseats_train$ShelveLoc = as.factor(carseats_train$ShelveLoc)
+carseats_train$US = as.factor(carseats_train$US)
+carseats_train$Urban = as.factor(carseats_train$Urban)
+```
+
+Parameters are selected based on results of lm for best subset selection 
+
+
+```{r}
+gam.1 = gam(Price~.,data=carseats_train)
+par(mfrow =c(2,5))
+
+plot(gam.1, se=TRUE ,col ="blue ")
+  summary(gam.1)
+
+```
+
+
+
+```{r}
+carseats_test = read.csv("Carseats_test.csv")
+
+carseats_test = subset(carseats_test, select = -X )
+
+carseats_test$ShelveLoc = as.factor(carseats_test$ShelveLoc)
+carseats_test$US = as.factor(carseats_test$US)
+carseats_test$Urban = as.factor(carseats_test$Urban)
+```
+
+
+```{r}
+
+preds=predict (gam.1,newdata =carseats_test)
+mean((carseats_test$Price-preds)^2)
+
+```
+
+This is the mse for using all predictors. 
+
+We can use earlier finding from best subset to choose the best 7(shelveloc was 2 of them), and see how it changes, before playing more with s() and ns()
+
+
+
+```{r}
+gam.2=gam(Price~ CompPrice+ Sales+ Income+Advertising + ShelveLoc+Age,data=carseats_train)
+par(mfrow =c(1,6))
+
+plot(gam.2, se=TRUE ,col ="red ")
+
+preds=predict (gam.2,newdata =carseats_test)
+mean((carseats_test$Price-preds)^2)
+  summary(gam.2)
+
+```
+
+All predictors of gam.2 us significant
+
+
+there is an mse of 102.56, which is better than gam.1 agreeing with best subset. 
+
+
+will attempt splines
+
+
+ns uses knots 
+
+```{r}
+#for(i in 1:10){
+i=1
+  gam.3=gam(Price~ s(CompPrice,7)+ s(Sales,1)+ s(Income,1)+s(Advertising,1) + ShelveLoc+s(Age,2),data=carseats_train)
+  par(mfrow =c(1,6))
+  
+  #plot(gam.3, se=TRUE ,col ="red ")
+  
+  preds=predict (gam.3,newdata =carseats_test)
+  print(c(i, mean((carseats_test$Price-preds)^2)))
+
+
+#}
+  #print(anova(gam.3))
+  print(summary(gam.3))
+
+```
+sales appears to only have the non parametric effect at a significance, after finding the values based on lowest mse
+and income has the smallest decrease in variance of the response according to the output
+as the probability of having a parameteric effect is lower, will use that. 
+
+this is equivaluent to gam.2
+
+will make the same attempts with ns()
+
+
+```{r}
+#for(i in 1:10){
+i=1
+  gam.4=gam(Price~ ns(CompPrice,10)+ ns(Sales,1)+ ns(Income,df =1)+ns(Advertising,df=1) + ShelveLoc+ns(Age,df= 1) ,data=carseats_train)
+  par(mfrow =c(1,6))
+  
+  #plot(gam.3, se=TRUE ,col ="red ")
+  
+  preds=predict (gam.4,newdata =carseats_test)
+  print(c(i, mean((carseats_test$Price-preds)^2)))
+#}
+
+  summary(gam.4)
+
+```
+best response was found with comprice 10, otherwise the same as vefore and a mse bit lower than with splines
+
+gam.4 gives the best mse response, with the parametric effects. 
+
+
+
+
+```{r}
+
+anova(gam.2, gam.3, gam.1 , gam.4,test="F")
+
+```
+
+
+gam.2 gives the best response compared to increasing complexity
+
+
+
+
+This suggests the finding agree with best subset and has the same findings
+the use of splines for th values provides some insight that there is some variability in compprice which is why a better mse was given with a higher amount of knots
+
+
+
+fit for overall model
+
+
+```{r}
+
+library(ISLR)
+data("Carseats")
+
+```
+
+
+
+```{r}
+
+gam.full=gam(Price~ CompPrice+ Sales+ Income+Advertising + ShelveLoc+Age,data=Carseats)
+par(mfrow =c(1,6))
+
+plot(gam.full, se=TRUE ,col ="orange")
+
+preds=predict (gam.full,newdata =Carseats)
+mean((Carseats$Price-preds)^2)
+  summary(gam.full)
+
+
+```
+Income least significant of teh predictors 
+Comp price contributing most
+followed by Sales
+then Shelveloc
+AGe
+Advertising
+agreeing with trees 
+
+
+

@@ -1,0 +1,234 @@
+---
+title: "Trees Compaison Siciliano"
+output: html_notebook
+---
+
+Import libraries and attach data
+```{r}
+library(ISLR2)
+library(tree)
+#data(Carseats)
+#attach(Carseats)
+
+carseats_train = read.csv("Carseats_train.csv")
+
+carseats_test = read.csv("Carseats_test.csv")
+
+
+```
+
+Create classification variable , required for regression
+
+```{r}
+
+suppressMessages(attach(carseats_train))
+
+
+carseats_train = subset(carseats_train, select = -X ) #drops x column
+
+#High_train <- factor(ifelse(Sales < 8, "No", "Yes")) #creates high variable
+#carseats_train <- data.frame(carseats_train , High_train) # attaches high variable
+
+#View(carseats_train)
+
+suppressMessages(attach(carseats_test))
+
+carseats_test = subset(carseats_test, select = -X ) #drops x column
+
+
+#High_test <- factor(ifelse(Sales < 8, "No", "Yes")) #creates high variable
+#carseats_test <- data.frame(carseats_test , High_test) # attaches high variable
+
+#View(carseats_test)
+
+
+
+```
+
+required variables for a classification tree 
+
+```{r}
+
+suppressMessages(attach(carseats_train))
+
+
+carseats_train = subset(carseats_train, select = -X )
+
+High_train <- factor(ifelse(Sales < 8, 0, 1)) #creates high variable  did have factor() here 
+carseats_train <- data.frame(carseats_train , High_train) # attaches high variable
+
+
+
+#class(carseats_train$High_train)
+#carseats_train$High_train = as.integer(carseats_train$High_train)
+#class(carseats_train$High_train)
+
+
+
+suppressMessages(attach(carseats_test))
+
+carseats_test = subset(carseats_test, select = -X )
+
+
+High_test <- factor(ifelse(Sales < 8, 0, 1)) #creates high variable
+carseats_test <- data.frame(carseats_test , High_test) # attaches high variable
+
+
+
+```
+
+```{r}
+carseats_train$ShelveLoc = as.factor(carseats_train$ShelveLoc)
+carseats_train$US = as.factor(carseats_train$US)
+carseats_train$Urban = as.factor(carseats_train$Urban)
+
+
+```
+
+
+
+```{r}
+head(carseats_train)
+```
+
+
+
+Classification tree 
+
+```{r}
+suppressMessages(attach(carseats_train))
+
+
+#View(Carseats)
+
+
+#classification
+tree.carseats <- tree(High_train ~ . - Sales, carseats_train, split= "gini") #dropping sales here 
+
+
+
+#regression
+#tree.carseats <- tree(Price ~ . - Price, carseats_train) #dropping sales here 
+summary(tree.carseats)
+
+
+```
+```{r}
+
+plot(tree.carseats)
+text(tree.carseats, pretty = 0)
+
+
+
+```
+
+
+
+```{r}
+View(tree.carseats$frame)
+
+```
+
+
+
+Prediction 
+
+```{r}
+#attach(carseats_test)
+
+tree.pred <- predict(tree.carseats , carseats_test ) #,type = "tree"
+#View(tree.pred)
+#View(Price)
+
+mse = 0 
+
+#print(typeof(tree.pred))
+#print(length(tree.pred))
+
+for(i in 1:length(tree.pred))
+  
+  mse = mse + (Price[i] - tree.pred[i])**2
+  #print(mse)
+print(mse/length(tree.pred))
+
+#MSE 378.2664 full tree
+
+```
+
+Pruning with Misclassification
+
+```{r}
+#attach(carseats_train) # changeable with test and train depending on which graph wanting results 
+
+
+prune.carseats <- prune.tree(tree.carseats, best =6)  #in order to prune the tree (9 refers to the "size")
+
+#sequences of cuts, leaves:misclass :  13:378.2664,  12:374.0569,  11:372.0732,   10:379.3271,   8: 401.6294 , 7:377.1002, 6: 365.1234, 5:377.2487,  4:403.2813, 3:440.0371,    2: 458.5094#Test
+# 13:191.7746,  12:199.1575,  11:206.63 ,   10:214.9282,   8:244.6949 , 7:261.4313, 6: 281.0706 , 5:301.3909,  4:332.2309, 3:386.2193,    2:443.0949  #train
+
+#plot(prune.carseats)
+#text(prune.carseats , pretty = 0)
+#summary(prune.carseats)
+#prune.carseats
+
+tree.pred <- predict(prune.carseats , carseats_test ) #,type = "class")
+
+
+#attach(carseats_test) #carseats_test
+
+
+mse = 0 
+for(i in 1:length(tree.pred))
+  mse = mse + (Price[i] - tree.pred[i])**2
+print(mse/length(tree.pred))
+
+
+```
+
+```{r}
+
+plot(prune.carseats)
+text(prune.carseats, pretty = 0)
+```
+
+
+Research
+
+Does the tree libarary in R grow with gini or entropy 
+
+when using tree there are only the split criteria as "deviance" or "gini"
+
+
+
+
+
+
+
+
+
+
+
+
+another attempt using gini
+
+```{r}
+set.seed(1)
+n=200
+X1=runif(n)
+X2=runif(n)
+P=.8*(X1<.3)*(X2<.5)+
+  .2*(X1<.3)*(X2>.5)+
+  .8*(X1>.3)*(X1<.85)*(X2<.3)+
+  .2*(X1>.3)*(X1<.85)*(X2>.3)+
+  .8*(X1>.85)*(X2<.7)+
+  .2*(X1>.85)*(X2>.7) 
+Y=rbinom(n,size=1,P)  
+B=data.frame(Y,X1,X2)
+```
+
+
+
+```{r}
+tree(Y~X2,method="gini")
+```
+

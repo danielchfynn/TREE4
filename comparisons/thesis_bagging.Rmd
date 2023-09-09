@@ -1,0 +1,94 @@
+---
+title: "thesis_boosting"
+author: "Daniel Fynn"
+date: "2023-08-15"
+output: html_document
+---
+
+bagging uses tree ensemble with bootstrappign training set 
+
+out of bag error, no cv, can use 2/3 for train, use each tree the ith observation is not used 
+
+difficult to interpret variable importance : use rss decrease to evaluate splits
+
+
+bagging is a special case of random forest with m = p 
+
+
+
+```{r}
+carseats_train = read.csv("Carseats_train.csv")
+
+carseats_train = subset(carseats_train, select = -X )
+
+carseats_test = read.csv("Carseats_test.csv")
+carseats_test = subset(carseats_test, select = -X )
+```
+
+this is sampled with replacement
+samp size is 0.632 * obs
+
+```{r}
+
+library(randomForest)
+set.seed(1)
+bag.carseats =randomForest(Price~.,data=carseats_train, mtry=10, importance =TRUE, ntree = 500, do.trace = FALSE, x_test = carseats_test[,-Price], keep.inbag = TRUE)
+bag.carseats
+
+```
+
+mtry = p is for all predictors should be used, aka bagging should be done 
+ntree = 500 default
+mean squared error formed from mse oob error on prediction set 
+bag.carseats$oob.times - will give count as to not have been in the series 
+
+
+
+```{r}
+yhat.bag = predict (bag.carseats ,newdata =carseats_test)
+plot(yhat.bag , carseats_test$Price)
+abline (0,1)
+mean(( yhat.bag -carseats_test$Price)^2)
+```
+ importance - importance of predictors assessed 
+
+
+random forest - defaults to p/3 predictirs for regression and sqrt(p) for class 
+
+```{r}
+importance(bag.carseats)
+```
+
+```{r}
+varImpPlot(bag.carseats, main = "Bagging Variable Importance on Carseats Training")
+```
+
+model on whole dataset 
+
+
+```{r}
+
+library("ISLR")
+data(Carseats)
+
+
+set.seed(1)
+bag.carseatsfull =randomForest(Price~.,data=Carseats, mtry=10, importance =TRUE, ntree = 500, do.trace = FALSE, keep.inbag = TRUE)
+bag.carseatsfull
+
+
+plot(bag.carseatsfull$predicted , Carseats$Price)
+abline (0,1)
+
+importance(bag.carseatsfull)
+
+varImpPlot(bag.carseatsfull)
+
+```
+
+
+
+
+
+
+

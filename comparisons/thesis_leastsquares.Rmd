@@ -1,0 +1,56 @@
+---
+title: "thesis_leastsqaures"
+author: "Daniel Fynn"
+date: "2023-08-14"
+output: html_document
+---
+
+```{r}
+carseats_train = read.csv("Carseats_train.csv")
+
+carseats_train
+
+carseats_train = subset(carseats_train, select = -X ) 
+
+
+```
+
+
+
+```{r}
+lm1 = lm(Price ~.,data=carseats_train)  
+summary(lm1)
+
+```
+
+
+```{r}
+carseats_test = read.csv("Carseats_test.csv")
+carseats_test = subset(carseats_test, select = -X )
+
+y_test = carseats_test$Price
+```
+
+
+
+```{r}
+
+
+lm1_predict = predict(lm1, carseats_test)
+                      
+mean((y_test-lm1_predict)^2)                     
+                      
+```
+
+
+
+```{r}
+
+library("ISLR")
+data(Carseats)
+
+
+lm1 = lm(Price ~.,data=Carseats)  
+summary(lm1)
+```
+
