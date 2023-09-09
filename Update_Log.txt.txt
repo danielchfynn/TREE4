@@ -96,3 +96,18 @@ we can use node prop gains for the length of the branches (in some way)
 
 26/7/23
 Have done a bit more tweaking to the binpi methods, found some inconsistencies. Have also a new run sheet using the cdc heart disease data set bimi_applied_heart. performed comparison between cart libary bimpi imputation with fast, and using sklearn adaboost function. 
+
+9/9/23
+Upload of updated cart, includes minor functional changes, inclusing a now working combination_split possibility to lbt(). Also a major correction in the prediction function, with the misordering of the dictionary and for loop there. 
+pruning also works for all methods (except maybe adaboost on its own, which hasnt been tested for individual use, and only within binpi)
+
+uploaded other working sheets like teh heart dataset preprocessing
+heart_disease_pre_imp.csv for use in the binpi_heart set, as a zip
+full_data_heart.csv for use with the preprocessing sheet to creaste the heart_disease_pre_imp.csv - can't upload because of the size of the file, but there are instructions about how to get the data within the preprocessing worksheet
+
+uploaded prova_twoing_regression.ipynb - but this can also be implemented from prova_regressionjupyter.ipynb
+
+also the comparison sheets have been uploaded in comparisons folder for scikit, r, and matlab
+
+
+  
