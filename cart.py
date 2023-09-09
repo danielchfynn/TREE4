@@ -64,6 +64,7 @@ class MyNodeClass(MyBaseClass, NodeMixin):  # Add Node feature
     value_soglia_split = []
     beta = []
     alpha = []
+    error = []
 
     def __init__(self, name, indexes, split=None, parent=None,node_level= 0,to_pop = False):
         super(MyNodeClass, self).__init__()
@@ -152,6 +153,9 @@ class MyNodeClass(MyBaseClass, NodeMixin):  # Add Node feature
     
     def set_alpha(self,alpha):
         self.alpha = alpha
+
+    def set_error(self, error):
+        self.error = error
 
     # define binary split mechanics (for numerical variables)
     def bin_split(self, feat, feat_nominal, var_name, soglia):
@@ -266,6 +270,7 @@ class CART:
         self.twoing_c1 = {}
         self.twoing_c2 = {}
         self.twoing_y = pd.DataFrame()
+        self.pred_node = []
 
     def user_impur_fn(self, func, node):
         return func(self, node)
@@ -273,65 +278,60 @@ class CART:
 
     def impur(self,node, display = False):
         if self.problem =='regression':
+
             if self.impurity_fn =="between_variance":
-                return (mean(self.y[node.indexes])**2)*len(self.y[node.indexes]) #TODO
+                return (mean(self.y[node.indexes])**2)*len(self.y[node.indexes]) 
             
             elif self.impurity_fn == "pearson":
-                
                 df = self.dict_to_dataframe()
                 df = df.iloc[node.indexes]
                 wss = 0 
                 mean_y = mean(df["y"])
                 for j in range(len(df["y"])):
                     wss += (df["y"].iloc[j] - mean_y)**2
-
                 return wss
 
             elif self.impurity_fn =="user_defined":
                 if self.user_impur:
                     return self.user_impur_fn(self.user_impur, node)
                 else:
-                    print("Must define 'user_impur' if selecting 'user_defined' for 'impur_fn'")
-                 
+                    print("Must define 'user_impur' if selecting 'user_defined' for 'impur_fn'")     
             else:
                 print("Impurity-fn only defined for between variance for regression problem.")
+        
         elif self.problem == 'classifier':
-
             prom = 0
             c = Counter(self.y[node.indexes]) #Creates a dictionary {"yes":number, "no"}
             c = list(c.items())
 
             if self.impurity_fn =="gini":
                 for i in  c:
-                    prob_i = float((i[1]/len(self.y[node.indexes])))**2 #probability squared
+                    prob_i = float((i[1]/len(self.y[node.indexes])))**2 
                     
                     if display:
                         prom += prob_i
                     else:
                         prom += prob_i*i[1]#/len(self.y[node.indexes]) #original weighted, only looking at purity # got rid of issues with cart gini
-                        #prom += prob_i
                 if display:
                     return 1-prom 
                 else:  
                     return prom #for use in maximising fn
+            
             elif self.impurity_fn =="entropy":
-                
                 for i in c:
-                    prob_i = float((i[1]/len(self.y[node.indexes]))) #probabillity
-
-                    prom += prob_i*math.log(prob_i,2)  #*i[1]
-
-                    #prom += prob_i*math.log2(prob_i)  #*i[1]
+                    prob_i = float((i[1]/len(self.y[node.indexes])))
+                    prom += prob_i*math.log(prob_i,2) 
                 return -prom#/len(c)
+            
             elif self.impurity_fn =="user_defined":
                 if self.user_impur:
                     return self.user_impur_fn(self.user_impur, node)
                 else:
                     print("Must define 'user_impur' if selecting 'user_defined' for 'impur_fn'")
             
-            elif self.impurity_fn == "tau":  #not sure if tau and fast must go together yet
+            elif self.impurity_fn == "tau": 
                 for i in  c:
-                    prom += float((i[1]/len(self.y[node.indexes])))**2 #probability squared
+                    prom += float((i[1]/len(self.y[node.indexes])))**2 
                 return prom
             
             else:
@@ -446,7 +446,7 @@ class CART:
         return pearson_list
 
 
-    def __node_search_split(self,node:MyNodeClass, max_k, combination_split):
+    def __node_search_split(self,node:MyNodeClass, max_k, combination_split, max_c):
 
         '''
         The function return the best split thath the node may compute.
@@ -490,123 +490,133 @@ class CART:
                 
                 betas = []
                 alphas = []
+                errors = []
                 k = -1
+                
                 while k < len(ordered_list)-1:
-                    k +=1                       #can start a while loop here with k to use try, except to continue loop
+                    k +=1   
+                    n = 0                    #can start a while loop here with k to use try, except to continue loop
                     #print(k, ordered_list[k][1])
-
-                    if combination_split:
-                        if k  < len(ordered_list)-1: #combines the ajoined high tau values
-                            comb_split = str(ordered_list[k][1])+"*"+str(ordered_list[k+1][1])
-                            df[comb_split] = df[ordered_list[k][1]] + df[ordered_list[k+1][1]] 
-                            cont = pd.crosstab(index = df[comb_split], columns= df["y"], normalize = 'index')
-                        else:
-                            if len(splits):
-                                print("Unable to go through max_k, only went through: ", len(splits), "time/s")
-                                best_index = between_variance.index(max(between_variance))
-                                node.set_beta(np.around(betas[best_index],4).tolist())
-                                node.set_alpha(np.around(alphas[best_index],4).tolist())
-                                var1, var2 = variables[best_index].split("*")
-                                self.n_features[variables[best_index]] = self.n_features[var1] + self.n_features[var2]
-                                return variables[best_index], splits[best_index], between_variance[best_index] 
+                    while n <= max_c: 
+                        n+=1
+                        #print("combination_split11", k, n, len(ordered_list))
+                        if combination_split:
+                            if k  < len(ordered_list)-n: #combines the ajoined high tau values, as soon as it hits the bottom once it will stop, max_c should be a third of predictors max
+                                comb_split = str(ordered_list[k][1])+"__"+str(ordered_list[k+n][1])
+                                df[comb_split] = df[ordered_list[k][1]] + df[ordered_list[k+n][1]] 
+                                cont = pd.crosstab(index = df[comb_split], columns= df["y"], normalize = 'index')
                             else:
-                                print("No splits found")
-                                return None
-                    else:
-                        #creates crosstable
-                        cont = pd.crosstab(index = df[ordered_list[k][1]], columns= df["y"], normalize = 'index')
+                                if len(splits):
+                                    print("Unable to go through max_k, only went through: ", len(splits), "time/s")
+                                    best_index = between_variance.index(max(between_variance))
+                                    node.set_beta(betas[best_index])
+                                    node.set_alpha(alphas[best_index])
+                                    node.set_error(errors[best_index])
 
-                    #converts into an r dataframe
-                    with (robjects.default_converter + pandas2ri.converter).context():
-                        cont_r = robjects.conversion.get_conversion().py2rpy(cont)
-
-
-                    try:
-                        robjects.r.assign("cont_r", cont_r)
-                        robjects.r("cont_r <-  as.matrix(cont_r)")
-                        robjects.r("suppressWarnings(suppressMessages(out <- lba(cont_r, K = 2 , what = 'outer', method = 'ls', trace.lba = FALSE)))")
-                        robjects.r("alpha <- out$A")
-                        alpha = robjects.r('alpha')
-                        alpha = np.asarray(alpha)
-
-                        robjects.r("beta <- t(out$B)")
-                        beta = robjects.r('beta')
-                        beta = np.asarray(beta)
-
-                        robjects.r("error <- out$val_func")
-                        error = robjects.r('error')
-                        error = np.asarray(error)
-                        error = -round(error.item(), 16)
-                        #out = lba.lba(base.as_matrix(cont_r), K = 2 , what = 'outer', method = 'ls') #base.trace.lba = 0 doesnt work
-                    except:
-                        print("Error in LBA function")
-                        time.sleep(4) #issue with printing order bewtten python n r 
-                        continue
-                    
-                    split = []
-                    for i in range(alpha.shape[0]):
-                        if alpha[i][0] >= 0.5:            #threshold point set to 0.5, what if the alphas are less than 0.5 for both groups, i think it gets caught later by teh delta fn
-                            split.append(cont.index[i])
-                    
-                    if split and len(split) != len(set(df[ordered_list[k][1]])):  #looks that at least 1 alpha > 0.5, and not all values
-
-                        #might do some split evaluation here 
-                        if not combination_split:
-                            stump = node.bin_split(self.features, self.n_features, str(ordered_list[k][1]),split)
+                                    var1, var2 = variables[best_index].split("__")
+                                    self.n_features[variables[best_index]] = self.n_features[var1] + self.n_features[var2]
+                                    return variables[best_index], tuple(splits[best_index]), between_variance[best_index] 
+                                else:
+                                    print("No splits found")
+                                    return None
                         else:
-                            #
-                            stump = node.bin_split(self.features, df , comb_split,split) #may not work later when evaluating in the table
-                            #print("TODO evaluation for lbt beyond using their errors")
-                        if self.y[stump[0].indexes].size >= self.grow_rules['min_cases_child'] \
-                            and self.y[stump[1].indexes].size >= self.grow_rules['min_cases_child']:
-                            
-                            impur0 = self.impur(stump[0])
-                            impur1 = self.impur(stump[1])
+                            #creates crosstable
+                            cont = pd.crosstab(index = df[ordered_list[k][1]], columns= df["y"], normalize = 'index')
 
-                            splits.append(split) #had list around it , had -1index
-                            #between_variance.append(error)
+                        #converts into an r dataframe
+                        with (robjects.default_converter + pandas2ri.converter).context():
+                            cont_r = robjects.conversion.get_conversion().py2rpy(cont)
+
+
+                        try:
+                            robjects.r.assign("cont_r", cont_r)
+                            robjects.r("cont_r <-  as.matrix(cont_r)")
+                            robjects.r("set.seed(2)")
+                            robjects.r("suppressWarnings(suppressMessages(out <- lba(cont_r, K = 2 , what = 'outer', method = 'ls', trace.lba = FALSE)))")
+                            robjects.r("alpha <- out$A")
+                            alpha = robjects.r('alpha')
+                            alpha = np.asarray(alpha)
+
+                            robjects.r("beta <- t(out$B)")
+                            beta = robjects.r('beta')
+                            beta = np.asarray(beta)
+
+                            robjects.r("error <- out$val_func")
+                            error = robjects.r('error')
+                            error = np.asarray(error)
+                            #error = -round(error.item(), 16)
+                            #out = lba.lba(base.as_matrix(cont_r), K = 2 , what = 'outer', method = 'ls') #base.trace.lba = 0 doesnt work
+                        except:
+                            print("Error in LBA function")
+                            time.sleep(4) #issue with printing order bewtten python n r 
+                            continue
+                        
+                        split = []
+                        for i in range(alpha.shape[0]):
+                            if alpha[i][0] >= 0.5:            #threshold point set to 0.5, what if the alphas are less than 0.5 for both groups, i think it gets caught later by teh delta fn
+                                split.append(cont.index[i])
+
+                        if split and len(split) != alpha.shape[0]: #len(set(df[ordered_list[k][1]])):  #looks that at least 1 alpha > 0.5, and not all values
+
+                            #might do some split evaluation here 
+                            if not combination_split:
+                                stump = node.bin_split(self.features, self.n_features, str(ordered_list[k][1]),split)
+                            else:
+                                #print("combination_split", df.columns, comb_split)
+                                stump = node.bin_split(self.features, df.copy() , comb_split,split) #may not work later when evaluating in the table
+                               
+                            if self.y[stump[0].indexes].size >= self.grow_rules['min_cases_child'] \
+                                and self.y[stump[1].indexes].size >= self.grow_rules['min_cases_child']:
+
+                                impur0 = self.impur(stump[0])
+                                impur1 = self.impur(stump[1])
+
+                                splits.append(split) #had list around it , had -1index
+                                #between_variance.append(error)
+                                if combination_split:
+                                    variables.append(comb_split)
+                                else:
+                                    variables.append(ordered_list[k][1])
+                                betas.append(np.around(beta,2).tolist()) #before were still arrays
+                                alphas.append(np.around(alpha,2).tolist())
+                                errors.append(np.around(error,2).tolist())
+
+                                if self.impurity_fn =="entropy":
+                                    entropy_parent = self.impur(node)
+                                    inf_gain = entropy_parent - ((len(stump[0].indexes) / len(node.indexes)) * impur0 + (len(stump[1].indexes) / len(node.indexes)) * impur1)
+                                    between_variance.append([inf_gain, error])                                
+                                else:
+                                    between_variance.append([(impur0) + (impur1), error]) #TODO evaluate if error is good enough to use as metric 
+                            else:
+                                continue
+                        else:
+                            #when no split is found with alpha greater than 0.5, or len(split) is = len(set(var))
+                            continue
+
+                        #print(splits, between_variance, variables, alpha, cont )
+                        #print(cont, alpha, split)
+
+
+                        #max_k = 2 #allows for selecting the first max_k complete splits aka no error from lba
+
+
+                        if len(splits) >= max_k: #max k can be a user controlled variable, passed to the CART class 
+                            best_index = between_variance.index(max(between_variance))
+                            #print(splits, between_variance, variables, best_index )
+                            node.set_beta(betas[best_index])
+                            node.set_alpha(alphas[best_index]) #np.around(alphas[best_index],4).tolist())
+                            node.set_error(errors[best_index])
+
                             if combination_split:
-                                variables.append(comb_split)
-                            else:
-                                variables.append(ordered_list[k][1])
-                            betas.append(beta)
-                            alphas.append(alpha)
-
-
-                            if self.impurity_fn =="entropy":
-                                entropy_parent = self.impur(node)
-                                inf_gain = entropy_parent - ((len(stump[0].indexes) / len(node.indexes)) * impur0 + (len(stump[1].indexes) / len(node.indexes)) * impur1)
-                                between_variance.append([inf_gain, error])                                
-                            else:
-                                between_variance.append([(impur0) + (impur1), error]) #TODO evaluate if error is good enough to use as metric 
+                                var1, var2 = variables[best_index].split("__")
+                                self.n_features[variables[best_index]] = self.n_features[var1] + self.n_features[var2]
+                                
+                            return variables[best_index], tuple(splits[best_index]), between_variance[best_index]    #"latent_budget_tree doesnt return an error" 
                         else:
                             continue
-                    else:
-                        #when no split is found with alpha greater than 0.5, or len(split) is = len(set(var))
-                        continue
 
-                    #print(splits, between_variance, variables, alpha, cont )
-                    #print(cont, alpha, split)
-
-
-                    #max_k = 2 #allows for selecting the first max_k complete splits aka no error from lba
-                    
-
-                    if len(splits) >= max_k: #max k can be a user controlled variable, passed to the CART class 
-                        best_index = between_variance.index(max(between_variance))
-                        #print(splits, between_variance, variables, best_index )
-                        node.set_beta(np.around(betas[best_index],4).tolist())
-                        node.set_alpha(np.around(alphas[best_index],4).tolist())
-
-                        if combination_split:
-                            var1, var2 = variables[best_index].split("*")
-                            self.n_features[variables[best_index]] = self.n_features[var1] + self.n_features[var2]
-
-                        return variables[best_index], splits[best_index], between_variance[best_index]    #"latent_budget_tree doesnt return an error" 
-                    else:
-                        continue
-
-            if self.method == "FAST" or self.method == "TWO-STAGE":
+            elif self.method == "FAST" or self.method == "TWO-STAGE":
+                #TODO include entropy, and shannon
                 if self.problem == "classifier":
                     ordered_list = self.tau_ordering(node)  
                 else:
@@ -629,7 +639,7 @@ class CART:
                         #if not df[str(var)].isnull().values.any(): 
                         combinazioni = []
                         distinct_values= []
-                        distinct_values.append(list(set(self.n_features[str(var)])))
+                        distinct_values.append(list(set(self.n_features[str(var)][node.indexes])))
                         distinct_values = list(itertools.chain(*distinct_values)) #flattens, removed nesting
                         for i in range(1,len(distinct_values)):
                             combinazioni.append(list(itertools.combinations(distinct_values, i)))
@@ -823,7 +833,10 @@ class CART:
                 print("Method given is not included")
         try:
             #print("max",max(between_variance))
-            return variables[between_variance.index(max(between_variance))],splits[between_variance.index(max(between_variance))],between_variance[between_variance.index(max(between_variance))]
+            if self.method == "LATENT-BUDGET-TREE":
+                return variables[between_variance.index(max(between_variance))],tuple(splits[between_variance.index(max(between_variance))]),between_variance[between_variance.index(max(between_variance))]
+            else:
+                return variables[between_variance.index(max(between_variance))],splits[between_variance.index(max(between_variance))],between_variance[between_variance.index(max(between_variance))]
         except:
             #this is mostly an error where the length is less than min size 
             if len(node.indexes) < self.grow_rules['min_cases_parent']:
@@ -896,10 +909,12 @@ class CART:
         return prob
             
     
-    def growing_tree(self,node:Node,rout='start',propotion_total=0.9, max_k = 1, combination_split = False):
+    def growing_tree(self,node:Node,rout='start',propotion_total=0.9, max_k = 1, combination_split = False, max_c = 1):
         
         value_soglia_variance = []
         mini_tree = [] 
+
+        self.combination_split = combination_split
 
         level = node.get_level()
         #print("level",level)
@@ -911,6 +926,7 @@ class CART:
         #twoing
         if self.twoing:
             #TODO utilise function P_l*P_r / 4 [sum|p(j|t_l) - p(j|t_r)|]**2 for computational efficiency 
+            #TODO a different way to reduce imputations: https://support.minitab.com/en-us/minitab/20/help-and-how-to/statistical-modeling/predictive-analytics/how-to/cart-classification/methods-and-formulas/node-splitting-methods/#twoing-criterion
             if self.problem == "classifier":
                 yold = self.y #keep it in local
                 combinazioni = []
@@ -952,7 +968,7 @@ class CART:
                         self.y = y["twoing"] #continually changing the self.y object , do i need to use set 
 
                         try:
-                            value,soglia,varian = self.__node_search_split(node, max_k, combination_split)  
+                            value,soglia,varian = self.__node_search_split(node, max_k, combination_split, max_c)  
                         except TypeError:
                             #print("TypeError [Twoing, pure node after new class assignment]")                    
                             if len(node.indexes) >= self.grow_rules['min_cases_parent']:
@@ -988,7 +1004,6 @@ class CART:
                     self.y = yold
                     return None
                 
-                #TODO consider what metric to use to evaluate lbt trees 
             
             elif self.problem == "regression":
                 
@@ -1069,7 +1084,7 @@ class CART:
                     else:
                         self.impurity_fn = "tau"
                     try:
-                        value,soglia,varian = self.__node_search_split(node, max_k, combination_split)  
+                        value,soglia,varian = self.__node_search_split(node, max_k, combination_split, max_c)  
                     except TypeError:
                         #print("TypeError [Twoing, pure node after new class assignment]")                    
                         if len(node.indexes) >= self.grow_rules['min_cases_parent']:
@@ -1124,7 +1139,7 @@ class CART:
                 return None
         else:
             try:
-                value,soglia,varian = self.__node_search_split(node, max_k, combination_split)  
+                value,soglia,varian = self.__node_search_split(node, max_k, combination_split, max_c)  
 
             except TypeError:
                 print("TypeError")
@@ -1153,7 +1168,6 @@ class CART:
         print("Split Found: ",node.name, value_soglia_variance,rout)
 
         ###### Calcolo della deviance nel nodo  
-
         if rout == 'start':
             self.father.append(node)
             if self.problem=='regression':
@@ -1239,7 +1253,7 @@ class CART:
              #   return None
         
         self.nsplit += 1
-        return self.growing_tree(left_node,"left",max_k = max_k, combination_split = combination_split),self.growing_tree(right_node,"right",max_k = max_k, combination_split = combination_split)
+        return self.growing_tree(left_node,"left",max_k = max_k, combination_split = combination_split, max_c = max_c),self.growing_tree(right_node,"right",max_k = max_k, combination_split = combination_split, max_c = max_c)
 
     
     def get_key(self, my_dict, val):
@@ -1404,11 +1418,13 @@ class CART:
         if self.problem == "classifier":
             
             s = 0
-            for i in list_node:
-                s += len(self.y[i.indexes])-Counter(self.y[i.indexes]).most_common(1)[0][1]
-        
+            for node in list_node:
+                s += len(self.y[node.indexes])-Counter(self.y[node.indexes]).most_common(1)[0][1] #works
+                #for val in self.y[node.indexes]:
+                #    if Counter(self.y[node.indexes]).most_common(1)[0][0] != val:
+                #        s +=1
+           
         elif self.problem == "regression":
-            
             s = 0
             comparison = []
             for node in list_node:
@@ -1434,19 +1450,18 @@ class CART:
         all_node = self.get_all_node().copy()
         leaves = self.get_leaf().copy()
 
-
         alpha=[]  #(alpha,node) lista degli alpha minimi
         miss =[]
         leaves_for_prune = []
         leaves_mse = {}
         leaves_miss ={}
         result = []
-
+        train_miss = {}
 
         #Creating alpha value for full tree
         alpha.append((0, None))
         leaves_for_prune.append(len(leaves))
-        miss.append(self.miss_classifications(leaves))       
+        miss.append(self.miss_classifications(leaves))    #appends count of total obs that are not in the majority class of the leaf    
         if self.problem =="classifier":
             result.append((f"Alpha = {alpha[0][0]}",f"value soglia = {alpha[0][1]}",f"misclassification = {miss[0]}",f"leaves = {leaves_for_prune[0]}"))
         else:
@@ -1456,12 +1471,10 @@ class CART:
         #Running through original prediction for full tree 
         mse = 0
         miss_val = 0
-        mse_list =[]
         if self.problem =='regression':
             for i in range(len(y_test)):      #iterates through number of rows in n_feature_test 
                 for node in all_node:
                     if node.name =="n1":           
-
                         new = []
                         new_n = []            
                         for name in self.features_names:
@@ -1474,26 +1487,14 @@ class CART:
                         d.update(dn)
                         self.pred_x(node, d, all_node, leaves)
 
-
                         mse += (y_test[i] - self.prediction_reg[-1])**2
-                        #mse_list.append= (y_test[i],self.prediction_reg[-1])
             leaves_mse[leaves_for_prune[-1]] = mse/len(y_test)
-
-            '''
-            print("len_ytest",len(y_test), "len_prediction_reg",len(self.prediction_reg))
-            comparison = []
-            for i in len(y_test):
-                comparison.append([y_test[i], self.prediction_reg[i]])
-            
-            print("c2",comparison)
-            '''
-
-
+        
+        #Classification
         else:
             for i in range(len(y_test)):       
                 for node in all_node:
                     if node.name =="n1":           
-
                         new = []
                         new_n = []            
                         for name in self.features_names:
@@ -1504,44 +1505,38 @@ class CART:
                         d = dict(zip(self.features_names, new))
                         dn = dict(zip(self.n_features_names, new_n))
                         d.update(dn)
-                        self.pred_x(node, d, all_node, leaves)              
-
+                        self.pred_x(node, d, all_node, leaves)  
                         if y_test[i] != self.prediction_cat[-1]:
                             miss_val +=1
-
             leaves_miss[leaves_for_prune[-1]] = miss_val
-
-        pruned_trees =[]
+               
         
+        pruned_trees =[]
+        pruned_trees.append([len(leaves), all_node.copy(), leaves.copy()]) #full tree
+       
         #Start Pruning Process, continuing until root node
         while len(all_node) >=3:
             
             new_dict = self.identify_subtrees(all_node,leaves)
-            
             cut = self.alpha_calculator(new_dict)
-            
             alpha.append(cut)  #(alpha,node)
             
             if(cut[1])==None:
                 break
+
             all_node = self.pop_list(all_node, lista_to_pop = new_dict[cut[1]][1]) #pop on all node
-            
             leaves = self.pop_list(leaves, lista_to_pop = new_dict[cut[1]][0]) #pop on leaf
             leaves.append(cut[1])
             miss.append(self.miss_classifications(leaves))
-
             leaves_for_prune.append(len(leaves))
-
             pruned_trees.append([len(leaves), all_node.copy(), leaves.copy()])
 
             mse = 0
             miss_val = 0
-            mse_list =[]
             if self.problem =='regression':
                 for i in range(len(y_test)):      #iterates through number of rows in n_feature_test 
                     for node in all_node:
                         if node.name =="n1":           
-
                             new = []
                             new_n = []            
                             for name in self.features_names:
@@ -1555,14 +1550,21 @@ class CART:
                             self.pred_x(node, d, all_node, leaves)
 
                             mse += (y_test[i] - self.prediction_reg[-1])**2
-                            #mse_list.append= (y_test[i],self.prediction_reg[-1])
                 leaves_mse[leaves_for_prune[-1]] = mse/len(y_test)
 
             else:
+                missclass1 = 0 
+                class1 = 0
+                missclass2 = 0 
+                class2 = 0
+                missclass3 = 0 
+                class3 = 0
+                missclass4 = 0 
+                class4 = 0
+
                 for i in range(len(y_test)):       
                     for node in all_node:
                         if node.name =="n1":           
-                            
                             new = []
                             new_n = []            
                             for name in self.features_names:
@@ -1573,13 +1575,41 @@ class CART:
                             d = dict(zip(self.features_names, new))
                             dn = dict(zip(self.n_features_names, new_n))
                             d.update(dn)
+                            
                             self.pred_x(node, d, all_node, leaves)                    
 
                             if y_test[i] != self.prediction_cat[-1]:
                                 miss_val +=1
-                
+
+                            if y_test[i] ==1:
+                                class1 += 1
+                                if self.prediction_cat[-1] != y_test[i]:
+                                    missclass1 += 1 
+                            if y_test[i] ==2:
+                                class2 += 1
+                                if self.prediction_cat[-1] != y_test[i]:
+                                    missclass2 += 1 
+                            if y_test[i] ==3:
+                                class3 += 1
+                                if self.prediction_cat[-1] != y_test[i]:
+                                    missclass3 += 1 
+                            if y_test[i] ==4:
+                                class4 += 1
+                                if self.prediction_cat[-1] != y_test[i]:
+                                    missclass4 += 1 
+
                 leaves_miss[leaves_for_prune[-1]] = miss_val   
-         
+                #print("Accuracy", round((1-missclass1 / class1) * 100, 2), round((1-missclass2 / class2) * 100, 2), round((1-missclass3 / class3) * 100, 2), round((1-missclass4 / class4 )* 100, 2))
+                pred_node_dict = {}
+                count = 0
+                for pred_node in self.pred_node[-len(y_test):]:
+                    count += 1
+                    if pred_node in pred_node_dict:
+                        pred_node_dict[pred_node] +=1
+                    else:
+                        pred_node_dict[pred_node] = 1
+                #print("pred_node_dict", pred_node_dict, count, len(y_test))
+
         if self.problem =='regression':
             print("{leaves : mean square error} = ", leaves_mse)
             minimum = 100000
@@ -1595,8 +1625,7 @@ class CART:
             
             for i in pruned_trees:
                 if i[0] == key_min:
-
-                    self.print_tree(i[1], i[2], "CART_tree_pruned.png","tree_pruned.dot")
+                    tree_table = self.print_tree(i[1], i[2], "CART_tree_pruned.png","tree_pruned.dot", table = True, html = True)
 
         else:
             print("{leaves : misclassification count} = ", leaves_miss)
@@ -1609,13 +1638,19 @@ class CART:
                         key_min = key
 
             print(f"Best tree for test set has {key_min} leaves with misclassification count {minimum} ")           
-            self.graph_results(leaves_for_prune,miss,"Training Set", list(leaves_miss.keys()),list(leaves_miss.values()),"Testing Set")
+            self.graph_results(leaves_for_prune,miss,"Training Set", list(leaves_miss.keys()),list(leaves_miss.values()),"Testing Set") #x1, y1, label1, x2, y2, label2
 
+            #leaves for prune - amount of leaves at different cuts
+            #miss is values that arent main *** wrong
+
+
+            #print tree for minkey, and get resulting table
             for i in pruned_trees:
                 if i[0] == key_min:
-
-                    self.print_tree(i[1], i[2], "CART_tree_pruned.png", "tree_pruned.dot")
+                    tree_table = self.print_tree(i[1], i[2], "CART_tree_pruned.png", "tree_pruned.dot", table = True, html = True)
         
+
+        #make alpha lists
         if self.problem =="classifier":
             for i in range(len(alpha)):
                 if alpha[i][1]!=None:
@@ -1625,6 +1660,7 @@ class CART:
                 if alpha[i][1]!=None:
                     result.append((f"Alpha = {alpha[i][0]}",f"value soglia = {alpha[i][1].get_value_thresh()}",f"deviance = {miss[i]}",f"leaves = {leaves_for_prune[i]}"))
         
+        '''
         if self.problem =="classifier":
             deviance = 0
             for node in leaves:
@@ -1636,8 +1672,9 @@ class CART:
                     p = i[1]/len(self.y[node.indexes])
                     deviance += p * math.log2(p)
             #print(f"WANT TO CHECK Deviance for classification problem {-deviance/len(self.y)} {-deviance} {len(self.y)}")
-                
-        return result
+        ''' 
+
+        return result, tree_table
     
     
     def cut_tree(self,how_many_leaves:int):
@@ -2003,7 +2040,7 @@ class CART:
                                 else:
                                     response_dict[response] =1
                             
-                            if self.method == "LATENT-BUDGET-TREE":
+                            if self.method == "LATENT-BUDGET-TREE" or self.twoing: #multiclass methods
                                 total_node_obs = sum(response_dict.values())
                                 for key in response_dict:
                                     response_dict[key] = round(response_dict[key] / total_node_obs,2)
@@ -2016,19 +2053,19 @@ class CART:
                                 class_node = max(response_dict, key = response_dict.get)
                             
                             if self.impurity_fn == "gini":
-                                v_label[label] = f"Node: {node.name}, Class: {class_node}, {self.impurity_fn} : {round(self.impur(node, display = True),2)}, Samples : {len(node.indexes)}" 
+                                v_label[label] = f"{node.name}, Class: {class_node}, {self.impurity_fn} : {round(self.impur(node, display = True),2)}, Samples : {len(node.indexes)}" 
                             elif self.impurity_fn == "tau":
-                                v_label[label] = f"Node: {node.name}, Class: {class_node}, {self.impurity_fn} : None, Samples : {len(node.indexes)}" 
+                                v_label[label] = f"{node.name}, Class: {class_node}, {self.impurity_fn} : None, Samples : {len(node.indexes)}" 
                             else:
-                                v_label[label] = f"Node: {node.name}, Class: {class_node}, {self.impurity_fn} : {round(self.impur(node),2)}, Samples : {len(node.indexes)}" 
+                                v_label[label] = f"{node.name}, Class: {class_node}, {self.impurity_fn} : {round(self.impur(node),2)}, Samples : {len(node.indexes)}" 
 
                         else:
                             mean_y = mean(self.y[node.indexes])
-                            v_label[label]=  f"Node: {node.name}, Bin Value: {round(mean_y,2)}, {self.impurity_fn} : {round(self.impur(node),2)}, Samples : {len(node.indexes)}"
+                            v_label[label]=  f"{node.name}, {node.split}, Bin Value: {round(mean_y,2)}, {self.impurity_fn} : {round(self.impur(node),2)}, Samples : {len(node.indexes)}"
                     
                     #label for non leaves
                     else:
-                        if self.method == "LATENT-BUDGET-TREE" and self.problem == "classifier":
+                        if self.problem == "classifier":
                             response_dict ={}
                             for response in self.y[node.indexes]:        #determing majority in terminal nodes
                                 if response in response_dict:
@@ -2036,26 +2073,29 @@ class CART:
                                 else:
                                     response_dict[response] =1
                             
-                            total_node_obs = sum(response_dict.values())
-                            for key in response_dict:
-                                response_dict[key] = round(response_dict[key] / total_node_obs,2)
-                            class_node = response_dict
-                            myKeys = list(class_node.keys())
-                            myKeys.sort()
-                            class_node = {i: class_node[i] for i in myKeys}
-                            if self.impurity_fn == "gini":
-                                v_label[label] = f"Node: {node.name}, Class:{class_node}, {node.split}, {self.impurity_fn} : {round(self.impur(node, display = True),2)}, Samples : {len(node.indexes)}"
-                            elif self.impurity_fn == "tau":
-                                v_label[label] = f"Node: {node.name}, Class: {class_node}, {self.impurity_fn} : {round(node.value_soglia_split[0][2],2)}, Samples : {len(node.indexes)}" 
+                            if self.method == "LATENT-BUDGET-TREE" or self.twoing: #multiclass methods
+                                total_node_obs = sum(response_dict.values())
+                                for key in response_dict:
+                                    response_dict[key] = round(response_dict[key] / total_node_obs,2)
+
+                                class_node = response_dict
+                                myKeys = list(class_node.keys())
+                                myKeys.sort()
+                                class_node = {i: class_node[i] for i in myKeys}
                             else:
-                                v_label[label] = f"Node: {node.name}, Class:{class_node}, {node.split}, {self.impurity_fn} : {round(self.impur(node),2)}, Samples : {len(node.indexes)}"
+                                class_node = max(response_dict, key = response_dict.get)
+
+                            if self.impurity_fn == "gini":
+                                v_label[label] = f"{node.name}, {node.split}, Class:{class_node}, {self.impurity_fn} : {round(self.impur(node, display = True),2)}, Samples: {len(node.indexes)}"
+                            elif self.impurity_fn == "tau":
+                                v_label[label] = f"{node.name}, {node.split}, Class:{class_node}, {self.impurity_fn} : {round(node.value_soglia_split[0][2],2)}, Samples: {len(node.indexes)}" 
+                            else:
+                                v_label[label] = f"{node.name}, {node.split}, Class:{class_node}, {self.impurity_fn} : {round(self.impur(node),2)}, Samples: {len(node.indexes)}"
                         else:
-                            if self.impurity_fn == "gini":
-                                v_label[label] = f"Node: {node.name}, {node.split}, {self.impurity_fn} : {round(self.impur(node, display = True),2)}, Samples : {len(node.indexes)}"
-                            elif self.impurity_fn == "tau":
-                                v_label[label] = f"Node: {node.name}, Class: {class_node}, {self.impurity_fn} : {round(node.value_soglia_split[0][2],2)}, Samples : {len(node.indexes)}" 
-                            else:
-                                v_label[label] = f"Node: {node.name}, {node.split}, {self.impurity_fn} : {round(self.impur(node),2)}, Samples : {len(node.indexes)}"
+                            mean_y = mean(self.y[node.indexes])
+                            v_label[label]=  f"{node.name}, {node.split}, Bin Value: {round(mean_y,2)}, {self.impurity_fn} : {round(self.impur(node),2)}, Samples : {len(node.indexes)}"
+
+
 
         labels = v_label
 
@@ -2095,10 +2135,10 @@ class CART:
 
         if table == True and self.method == "LATENT-BUDGET-TREE": 
             if self.twoing:
-                tree_table = pd.DataFrame(columns = ["Node", "Node_type", "Variable_Split", "Twoing_Classes_C1", "Twoing_Classes_C2", "n", "Impurity_Value", "Class_Probabilities", "Alpha","Beta" ])
+                tree_table = pd.DataFrame(columns = ["Node", "Node_type", "Variable_Split", "Twoing_Classes_C1", "Twoing_Classes_C2", "n", "Impurity_Value", "Class_Probabilities", "Alpha","Beta", "LS Error" ])
 
             else:
-                tree_table = pd.DataFrame(columns = ["Node", "Node_type", "Variable_Split", "n", "Impurity_Value", "Class_Probabilities", "Alpha","Beta" ])
+                tree_table = pd.DataFrame(columns = ["Node", "Node_type", "Variable_Split", "n", "Impurity_Value", "Class_Probabilities", "Alpha","Beta","LS Error" ])
             n1node = self.get_key(father_dict, 1)
             n1index = all_node.index(n1node)
 
@@ -2122,21 +2162,21 @@ class CART:
 
                 if self.twoing:
                     if self.impurity_fn == "gini":
-                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"Twoing_Classes_C1":[self.twoing_c1[node]], "Twoing_Classes_C2": [self.twoing_c2[node]],"n":len(node.indexes), "Impurity_Value":round(self.impur(node, display = True),2), "Class_Probabilities":class_node, "Alpha":[node.alpha], "Beta":[node.beta]})
+                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"Twoing_Classes_C1":[self.twoing_c1[node]], "Twoing_Classes_C2": [self.twoing_c2[node]],"n":len(node.indexes), "Impurity_Value":round(self.impur(node, display = True),2), "Class_Probabilities":class_node, "Alpha":[node.alpha], "Beta":[node.beta],"LS Error":[node.error] })
                     elif self.impurity_fn == "tau":
-                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"Twoing_Classes_C1":[self.twoing_c1[node]], "Twoing_Classes_C2": [self.twoing_c2[node]],"n":len(node.indexes), "Impurity_Value":round(node.value_soglia_split[0][2],2), "Class_Probabilities":class_node, "Alpha":[node.alpha], "Beta":[node.beta]})
+                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"Twoing_Classes_C1":[self.twoing_c1[node]], "Twoing_Classes_C2": [self.twoing_c2[node]],"n":len(node.indexes), "Impurity_Value":round(node.value_soglia_split[0][2],2), "Class_Probabilities":class_node, "Alpha":[node.alpha], "Beta":[node.beta],"LS Error":[node.error]})
                     elif self.impurity == "tau":
                                 v_label[label] = f"Node: {node.name}, Class: {class_node}, {self.impurity_fn} : {round(node.value_soglia_split[0][2],2)}, Samples : {len(node.indexes)}" 
                     else:
-                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"Twoing_Classes_C1":[self.twoing_c1[node]], "Twoing_Classes_C2": [self.twoing_c2[node]],"n":len(node.indexes), "Impurity_Value":round(self.impur(node),2), "Class_Probabilities":class_node,"Alpha":[node.alpha],"Beta":[node.beta]})
+                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"Twoing_Classes_C1":[self.twoing_c1[node]], "Twoing_Classes_C2": [self.twoing_c2[node]],"n":len(node.indexes), "Impurity_Value":round(self.impur(node),2), "Class_Probabilities":class_node,"Alpha":[node.alpha],"Beta":[node.beta],"LS Error":[node.error]})
 
                 else:
                     if self.impurity_fn == "gini":
-                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split, "n":len(node.indexes), "Impurity_Value":round(self.impur(node, display = True),2), "Class_Probabilities":class_node, "Alpha":[node.alpha], "Beta":[node.beta]})
+                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split, "n":len(node.indexes), "Impurity_Value":round(self.impur(node, display = True),2), "Class_Probabilities":class_node, "Alpha":[node.alpha], "Beta":[node.beta],"LS Error":[node.error]})
                     elif self.impurity_fn == "tau":
-                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"n":len(node.indexes), "Impurity_Value":round(node.value_soglia_split[0][2],2), "Class_Probabilities":class_node, "Alpha":[node.alpha], "Beta":[node.beta]})
+                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"n":len(node.indexes), "Impurity_Value":round(node.value_soglia_split[0][2],2), "Class_Probabilities":class_node, "Alpha":[node.alpha], "Beta":[node.beta],"LS Error":[node.error]})
                     else:
-                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split, "n":len(node.indexes), "Impurity_Value":round(self.impur(node),2), "Class_Probabilities":class_node,"Alpha":[node.alpha],"Beta":[node.beta]})
+                        new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split, "n":len(node.indexes), "Impurity_Value":round(self.impur(node),2), "Class_Probabilities":class_node,"Alpha":[node.alpha],"Beta":[node.beta],"LS Error":[node.error]})
                 tree_table = pd.concat([tree_table, new_df], ignore_index=True, sort=False)
                 node_num = int(node.name[1:])
                 if node_num *2 in leaf_dict.values():
@@ -2163,19 +2203,19 @@ class CART:
                     
                     if self.twoing:
                         if self.impurity_fn == "gini":
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None, "n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode, display = True),2), "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None, "n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode, display = True),2), "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta], "LS Error":[cnode.error]})
                         elif self.impurity_fn == "tau": #tau is only logged if there is a split 
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":None, "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":None, "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta],"LS Error":[cnode.error]})
                         else:
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None, "n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode),2), "Class_Probabilities":class_node,"Alpha":[cnode.alpha],"Beta":[cnode.beta]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None, "n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode),2), "Class_Probabilities":class_node,"Alpha":[cnode.alpha],"Beta":[cnode.beta],"LS Error":[cnode.error]})
 
                     else:
                         if self.impurity_fn == "gini":
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":cnode.split, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode, display = True),2),"Class_Probabilities":class_node, "Alpha":[cnode.alpha],"Beta":[cnode.beta]} )
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":None, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode, display = True),2),"Class_Probabilities":class_node, "Alpha":[cnode.alpha],"Beta":[cnode.beta], "LS Error":[cnode.error]} )
                         elif self.impurity_fn == "tau":  
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"n":len(cnode.indexes), "Impurity_Value":None, "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"n":len(cnode.indexes), "Impurity_Value":None, "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta], "LS Error":[cnode.error]})
                         else:
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":cnode.split, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode),2),"Class_Probabilities":class_node,"Alpha":[cnode.alpha], "Beta":[cnode.cbeta]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":None, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode),2),"Class_Probabilities":class_node,"Alpha":[cnode.alpha], "Beta":[cnode.cbeta], "LS Error":[cnode.error]})
                     tree_table = pd.concat([tree_table, new_df], ignore_index=True, sort=False)
                 if node_num *2+1 in leaf_dict.values():
                     cnode = self.get_key(leaf_dict, node_num*2+1)
@@ -2200,18 +2240,18 @@ class CART:
 
                     if self.twoing:
                         if self.impurity_fn == "gini":
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None, "n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode, display = True),2), "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None, "n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode, display = True),2), "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta], "LS Error":[cnode.error]})
                         elif self.impurity_fn == "tau": 
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":None, "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":None, "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta], "LS Error":[cnode.error]})
                         else:
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None, "n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode),2), "Class_Probabilities":class_node,"Alpha":[cnode.alpha],"Beta":[cnode.beta]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None, "n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode),2), "Class_Probabilities":class_node,"Alpha":[cnode.alpha],"Beta":[cnode.beta], "LS Error":[cnode.error]})
                     else:
                         if self.impurity_fn == "gini":
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":cnode.split, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode, display = True),2),"Class_Probabilities":class_node, "Alpha":[cnode.alpha],"Beta":[cnode.beta]} )
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":None, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode, display = True),2),"Class_Probabilities":class_node, "Alpha":[cnode.alpha],"Beta":[cnode.beta], "LS Error":[cnode.error]} )
                         elif self.impurity_fn == "tau":  
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"n":len(cnode.indexes), "Impurity_Value":None, "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta]})                        
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"n":len(cnode.indexes), "Impurity_Value":None, "Class_Probabilities":class_node, "Alpha":[cnode.alpha], "Beta":[cnode.beta], "LS Error":[cnode.error]})                        
                         else:
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":cnode.split, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode),2),"Class_Probabilities":class_node, "Alpha":[cnode.alpha],"Beta":[cnode.beta]} )
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":None, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode),2),"Class_Probabilities":class_node, "Alpha":[cnode.alpha],"Beta":[cnode.beta], "LS Error":[cnode.error]} )
                     tree_table = pd.concat([tree_table, new_df], ignore_index=True, sort=False)
             
             return tree_table
@@ -2263,8 +2303,11 @@ class CART:
                         new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split,"n":len(node.indexes), "Impurity_Value":round(node.value_soglia_split[0][2],2), "Class/Value":[class_node]})
                     else:
                         new_df = pd.DataFrame({"Node":node.name, "Node_type":"Parent", "Variable_Split":node.split, "n":len(node.indexes), "Impurity_Value":round(self.impur(node),2), "Class/Value":[class_node]})
+                
                 tree_table = pd.concat([tree_table, new_df], ignore_index=True, sort=False)
+                
                 node_num = int(node.name[1:])
+                
                 if node_num *2 in leaf_dict.values():
                     cnode = self.get_key(leaf_dict, node_num*2)
                     if self.problem == "regression":
@@ -2289,19 +2332,21 @@ class CART:
 
                     if self.twoing:
                         if self.impurity_fn == "gini":
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode, display = True),2), "Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode, display = True),2), "Class/Value":[class_node]})
                         elif self.impurity_fn == "tau": 
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None,"n":len(cnode.indexes), "Impurity_Value":None, "Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None,"n":len(cnode.indexes), "Impurity_Value":None, "Class/Value":[class_node]})
                         else:
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode),2), "Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode),2), "Class/Value":[class_node]})
                     else:
                         if self.impurity_fn == "gini":
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":cnode.split, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode, display = True),2),"Class/Value":[class_node]} )
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":None, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode, display = True),2),"Class/Value":[class_node]} )
                         elif self.impurity_fn == "tau": 
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"n":len(cnode.indexes), "Impurity_Value":None, "Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"n":len(cnode.indexes), "Impurity_Value":None, "Class/Value":[class_node]})
                         else:
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":cnode.split, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode),2),"Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":None, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode),2),"Class/Value":[class_node]})
+                    
                     tree_table = pd.concat([tree_table, new_df], ignore_index=True, sort=False)
+                
                 if node_num *2+1 in leaf_dict.values():
                     cnode = self.get_key(leaf_dict, node_num*2+1)
                     if self.problem == "regression":
@@ -2325,19 +2370,19 @@ class CART:
                             class_node = max(response_dict, key = response_dict.get)
                     if self.twoing:
                         if self.impurity_fn == "gini":
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode, display = True),2), "Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode, display = True),2), "Class/Value":[class_node]})
                         elif self.impurity_fn == "tau": 
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None,"n":len(cnode.indexes), "Impurity_Value":None, "Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2":None,"n":len(cnode.indexes), "Impurity_Value":None, "Class/Value":[class_node]})
 
                         else:
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode),2), "Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"Twoing_Classes_C1":None, "Twoing_Classes_C2": None,"n":len(cnode.indexes), "Impurity_Value":round(self.impur(cnode),2), "Class/Value":[class_node]})
                     else:
                         if self.impurity_fn == "gini":
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":cnode.split, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode, display = True),2),"Class/Value":[class_node]} )
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":None, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode, display = True),2),"Class/Value":[class_node]} )
                         elif self.impurity_fn == "tau": 
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":cnode.split,"n":len(cnode.indexes), "Impurity_Value":None, "Class/Value":[class_node]})
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child", "Variable_Split":None,"n":len(cnode.indexes), "Impurity_Value":None, "Class/Value":[class_node]})
                         else:
-                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":cnode.split, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode),2),"Class/Value":[class_node]} )
+                            new_df = pd.DataFrame({"Node":cnode.name, "Node_type":"Child","Variable_Split":None, "n":len(cnode.indexes),  "Impurity_Value":round(self.impur(cnode),2),"Class/Value":[class_node]} )
                     tree_table = pd.concat([tree_table, new_df], ignore_index=True, sort=False)
             
             return tree_table
@@ -2357,22 +2402,44 @@ class CART:
         
         if node in leaves:                            #Provides the final output for the predicted node
             if self.problem =="classifier":         #checks if the problem is classification
+                response_dict ={}
                 for response in self.y[node.indexes]:        #determing majority in terminal nodes
-                    response_dict ={}
                     if response in response_dict:
                         response_dict[response] +=1
                     else:
                         response_dict[response] =1
                 class_node = max(response_dict, key = response_dict.get)
                 self.prediction_cat.append(class_node)
-                
+                #print("pred_x", class_node, response_dict)
 
             else:
                 self.prediction_reg.append(mean(self.y[node.indexes]))
-            return node 
+            #print("pred_node",node.name)
+
+            self.pred_node.append(node.name)
+
+            return node
         
         else:
-            if eval(node.split, x):                 #Evaluates the split for the unsupervised x, whether it is true or not, will deterine if the split goes rigtht or left
+            if self.combination_split: #not 100% functional, issues with errors in x values, and appears every split leads to a true?
+                string2 = node.split.split(" in")[0]
+                combinations = string2.split("__")
+                split = str(combinations[0])+"__"+str(combinations[1])
+                #y = x.copy()
+                y = {}
+                y[split] = x[combinations[0]] + x[combinations[1]] 
+                #print("pruningcomb2",y, node.split)
+                #time.sleep(2)
+                #print(eval(node.split, y))#y has all this shit in it
+                if eval(node.split, y):                 #Evaluates the split for the unsupervised x, whether it is true or not, will deterine if the split goes rigtht or left
+                    new_node = self.get_key(node_dict, int(node.name[1:])*2+1)
+                    self.pred_x(new_node, x, all_node, leaves) # go to the right child
+                else:
+                    new_node = self.get_key(node_dict, int(node.name[1:])*2)
+                    self.pred_x(new_node, x, all_node, leaves) # go to the left child
+
+
+            elif eval(node.split, x):                 #Evaluates the split for the unsupervised x, whether it is true or not, will deterine if the split goes rigtht or left
                 new_node = self.get_key(node_dict, int(node.name[1:])*2+1)
                 self.pred_x(new_node, x, all_node, leaves) # go to the right child
             else:
@@ -2415,7 +2482,7 @@ class CART:
 
         if self.problem =="regression":
 
-            y_label = 'Deviance'
+            y_label = 'MSE'
         else:
             y_label = 'Misclassification'
 
@@ -2586,7 +2653,7 @@ def adaboost(df, feature_var, num_var, cat_var, _problem, impur_fn,  method = "C
                 print("parent node is pure, requires at least some stratification to be processed by CART")
                 break
             my_tree = MyNodeClass('n1', np.arange(len(y)))
-            model = CART(y, X_num_1, num_var_1, X_cat_1, cat_var_1, impurity_fn = impur_fn, problem = _problem, method = method, max_level = max_level, min_cases_parent= 5,min_cases_child= 2) ##TODO can try to get fast to work
+            model = CART(y, X_num_1, num_var_1, X_cat_1, cat_var_1, impurity_fn = impur_fn, problem = _problem, method = method, max_level = max_level) 
             model.growing_tree(my_tree)
             prediction_fn(model, y, X_num_1, num_var_1, X_cat_1, cat_var_1)
             overall_errors.append(error_checker(model, y_list, _problem))
@@ -2601,7 +2668,7 @@ def adaboost(df, feature_var, num_var, cat_var, _problem, impur_fn,  method = "C
 
 
         my_tree = MyNodeClass('n1', np.arange(len(y)))
-        model = CART(y, X_num, num_var_1, X_cat, cat_var_1, impurity_fn = impur_fn, problem = _problem, method = method, max_level = max_level, min_cases_parent= 5,min_cases_child= 2) ##TODO can try to get fast to work
+        model = CART(y, X_num, num_var_1, X_cat, cat_var_1, impurity_fn = impur_fn, problem = _problem, method = method, max_level = max_level) 
         model.growing_tree(my_tree)
         prediction_fn(model, y, X_num, num_var_1, X_cat, cat_var_1)
         overall_errors.append(error_checker(model, y_list, _problem))
@@ -3038,6 +3105,8 @@ def imputation_process(df2, feature_var, row_no, pos, num_var, bin_var, class_va
 
 def binpi_imputation(df2,column_vect, num_var, bin_var, class_var, weak_learners):
    
+
+    #Future adaption - for a dataset with no complete area, need to impute the least missing column with a simple method, mean mode, andrea frazzoni
     dict_match = matches_dict(column_vect)
 
     last_nan = 0
