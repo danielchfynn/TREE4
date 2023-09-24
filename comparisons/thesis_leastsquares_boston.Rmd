@@ -1,0 +1,54 @@
+---
+title: "thesis_leastsqaures"
+author: "Daniel Fynn"
+date: "2023-08-14"
+output: html_document
+---
+
+```{r}
+library(MASS)
+
+set.seed(10)
+index = seq(1,506)
+vals = sample(index, 340)
+
+boston_train = Boston[vals,]
+boston_test = Boston[-vals,]
+
+x_train=model.matrix (medv ~.,boston_train )[,-1]
+y_train=boston_train$medv
+
+y_test = boston_test$medv
+
+```
+
+
+
+```{r}
+lm1 = lm(medv ~.,data=boston_train)  
+summary(lm1)
+
+```
+
+
+
+
+```{r}
+
+
+lm1_predict = predict(lm1, boston_test)
+                      
+mean((y_test-lm1_predict)^2)                     
+                      
+```
+MSE 18.11
+
+
+```{r}
+
+
+
+lm1 = lm(medv ~.,data=Boston)  
+summary(lm1)
+```
+

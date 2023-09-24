@@ -1,0 +1,195 @@
+---
+title: "thesis_gam"
+author: "Daniel Fynn"
+date: "2023-08-14"
+output: html_document
+---
+
+Generalised Additive Model 
+pg 297 into to stat
+
+extension on simple linear regression 
+allows non-linear functions of each variable while maintaining additivity 
+allowing qualitative and quantitative responses 
+splines can bse constructed usuing an appropiately chosen basis fn. 
+
+using smoothing spines for predicytors doesnt allow for least squares 
+
+
+gam() fn can be used with smooting splines using backfitting
+
+only additive though multiplicative variable and multi-variate funtional can e added to design matrix 
+```{r}
+
+library(gam)
+
+```
+
+s() part of gam, as a smoothign spline
+splines use coefficients matching different regions of the predictor 
+natural spline - linear at the boundary
+
+ns(X,df) degrees of freedom for knots
+
+
+```{r}
+library(MASS)
+
+set.seed(10)
+index = seq(1,506)
+vals = sample(index, 340)
+
+boston_train = Boston[vals,]
+boston_test = Boston[-vals,]
+
+x_train=model.matrix (medv ~.,boston_train )[,-1]
+y_train=boston_train$medv
+```
+
+Parameters are selected based on results of lm for best subset selection 
+
+
+```{r}
+gam.1 = gam(medv~.,data=boston_train)
+par(mfrow =c(2,5))
+
+plot(gam.1, se=TRUE ,col ="blue ")
+  summary(gam.1)
+
+```
+
+
+
+```{r}
+
+preds=predict (gam.1,newdata =boston_test)
+mean((boston_test$medv-preds)^2)
+
+```
+
+This is the mse for using all predictors. 
+
+We can use earlier finding from best subset to choose the best 11 and see how it changes, before playing more with s() and ns()
+
+
+
+```{r}
+gam.2=gam(medv~ crim+zn+ chas+ nox+rm + dis+rad+tax+ptratio+black+lstat,data=boston_train)
+par(mfrow =c(1,6))
+
+plot(gam.2, se=TRUE ,col ="red ")
+
+preds=predict (gam.2,newdata =boston_test)
+mean((boston_test$medv-preds)^2)
+  summary(gam.2)
+
+```
+
+All predictors of gam.2 us significant, except rad
+
+
+there is an mse of 17.97, which is better than gam.1 agreeing with best subset. 
+
+
+will attempt splines
+
+
+ns uses knots 
+
+```{r}
+#for(i in 1:10){
+i=1
+  gam.3=gam(medv~ s(crim,1)+ s(zn,10)+ chas+s(nox,10) + dis+s(rad,6) +s(tax,1) + s(ptratio, 5)+ s(black,9) + s(lstat,7),data=boston_train)
+  par(mfrow =c(1,6))
+  
+  #plot(gam.3, se=TRUE ,col ="red ")
+  
+  preds=predict (gam.3,newdata =boston_test)
+  print(c(i, mean((boston_test$medv-preds)^2)))
+
+
+#}
+  #print(anova(gam.3))
+  print(summary(gam.3))
+
+```
+sales appears to only have the non parametric effect at a significance, after finding the values based on lowest mse
+and income has the smallest decrease in variance of the response according to the output
+as the probability of having a parameteric effect is lower, will use that. 
+
+
+MSE 12.89
+
+
+there is a nonparametric effect with nox, rad, tax, ptratio, lstat, and less significantly, crim, zn, with no nonparametric black, dis, chas
+
+will make the same attempts with ns()
+
+
+```{r}
+#for(i in 1:10){
+i=1
+  gam.4 = gam(medv~ ns(crim,10)+ ns(zn,1)+ chas+ns(nox,5) + dis+ns(rad,1) +ns(tax,2) + ns(ptratio, 4)+ ns(black,3) + ns(lstat,4),data=boston_train)
+  par(mfrow =c(1,6))
+  
+  #plot(gam.3, se=TRUE ,col ="red ")
+  
+  preds=predict (gam.4,newdata =boston_test)
+  print(c(i, mean((boston_test$medv-preds)^2)))
+#}
+
+  summary(gam.4)
+
+```
+  gam.3=gam(medv~ s(crim,1)+ s(zn,10)+ chas+s(nox,10) + dis+s(rad,6) +s(tax,1) + s(ptratio, 5)+ s(black,9) + s(lstat,7),data=boston_train)
+  
+  gam.4 = gam(medv~ ns(crim,10)+ ns(zn,1)+ chas+ns(nox,5) + dis+ns(rad,1) +ns(tax,2) + ns(ptratio, 4)+ ns(black,3) + ns(lstat,4),data=boston_train)
+
+
+differences in the values of the nodes that gve the lowest mse
+could try combination os s and ns
+
+
+gam.3 gives the best mse response, with the parametric effects. 
+
+
+
+
+```{r}
+
+anova(gam.2, gam.3, gam.1 , gam.4,test="F")
+
+```
+
+
+gam.3 gives the best response but is more complex
+
+
+
+
+
+
+
+
+fit for overall model
+
+
+
+```{r}
+
+gam.full=gam(medv~ s(crim,1)+ s(zn,10)+ chas+s(nox,10) + dis+s(rad,6) +s(tax,1) + s(ptratio, 5)+ s(black,9) + s(lstat,7),data=Boston)
+
+par(mfrow =c(1,6))
+
+plot(gam.full, se=TRUE ,col ="orange")
+
+preds=predict (gam.full,newdata =Boston)
+mean((Boston$medv-preds)^2)
+  summary(gam.full)
+
+
+```
+
+
+
+

@@ -1,0 +1,110 @@
+---
+title: "thesis_trees_boston"
+author: "Daniel Fynn"
+date: "2023-09-19"
+output: html_document
+---
+
+
+
+
+```{r}
+
+library(MASS)
+
+
+set.seed(10)
+index = seq(1,506)
+vals = sample(index, 340)
+
+
+Boston$chas = as.factor(Boston$chas)
+Boston$rad = as.factor(Boston$rad)
+
+boston_train = Boston[vals,]
+boston_test = Boston[-vals,]
+
+```
+
+
+
+```{r}
+library(tree)
+
+
+#regression
+tree.boston <- tree(medv ~ ., boston_train) #dropping sales here 
+summary(tree.boston)
+
+
+plot(tree.boston)
+text(tree.boston, pretty = 0)
+```
+
+
+```{r}
+
+tree.boston$frame
+
+```
+
+From this the full tree would be used 
+
+```{r}
+cv.boston =cv.tree(tree.boston )
+plot(cv.boston$size ,cv.boston$dev ,type="b")
+```
+
+
+
+
+```{r}
+
+tree.pred <- predict(tree.boston , boston_test ) 
+
+mse = 0 
+
+for(i in 1:length(tree.pred))
+  
+  mse = mse + (boston_test$medv[i] - tree.pred[i])**2
+print(mse/length(tree.pred))
+
+
+```
+
+MSE 19.91
+
+
+
+
+
+pruning
+```{r}
+
+prune.boston <- prune.tree(tree.boston, method = "deviance", newdata = boston_test)#, best =6)  #in order to prune the tree (9 refers to the "size")
+
+prune.boston
+
+plot(prune.boston)
+```
+
+full tree has lowest deviance
+
+
+```{r}
+prune.boston <- prune.tree(tree.boston, method = "deviance", newdata = boston_test,best =10)  #in order to prune the tree (9 refers to the "size")
+
+tree.pred <- predict(prune.boston, boston_test ) #,type = "class")
+
+
+#attach(carseats_test) #carseats_test
+
+
+mse = 0 
+for(i in 1:length(tree.pred))
+  mse = mse + (boston_test$medv[i] - tree.pred[i])**2
+print(mse/length(tree.pred))
+
+
+```
+

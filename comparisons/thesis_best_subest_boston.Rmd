@@ -1,0 +1,238 @@
+---
+title: "Thesis_best_subset"
+author: "Daniel Fynn"
+date: "2023-08-12"
+output: html_document
+---
+
+
+fit separate least squared models to the data
+
+choice dataset: Boston (MASS), medv as predictor, transforming categorical predictors to dummy encoding
+
+Following introduction to statistical learning Chapter 6 Lab, 220
+
+14 variables, 506 observations
+train will have the first 340 samples
+test will have 166 
+
+rad is an ordinal variable
+and chas is a dummy, but both will operate fine without onehot encoding
+
+```{r}
+library(MASS)
+
+
+set.seed(10)
+index = seq(1,506)
+vals = sample(index, 340)
+
+
+boston_train = Boston[vals,]
+boston_test = Boston[-vals,]
+
+boston_train
+```
+
+
+
+regsubsets function() from leaps library
+
+
+```{r}
+
+library(leaps)
+
+regfit.full = regsubsets(medv ~.,boston_train, nvmax =13 )
+summary(regfit.full)
+
+```
+Asterixes show variable inclusion for different amount of predictors giving best response for lm. 
+Showing rm as the giving best prediction for a single variable. 
+
+
+R^2 statistic
+
+```{r}
+summary(regfit.full)$rsq
+```
+
+rss vs adjusted R^2
+
+```{r}
+
+par(mfrow =c(2,2))
+plot(summary(regfit.full)$rss ,xlab=" Number of Variables ",ylab=" RSS", type="l")
+plot(summary(regfit.full)$adjr2 ,xlab =" Number of Variables ",
+ylab=" Adjusted RSq",type="l")
+
+
+points (11, summary(regfit.full)$adjr2[11], col ="red",cex =2, pch =20)
+
+
+plot(summary(regfit.full)$cp ,xlab =" Number of Variables ",ylab="Cp", type="l")
+
+points(11, summary(regfit.full)$cp [11], col ="red",cex =2, pch =20)
+
+plot(summary(regfit.full)$bic ,xlab=" Number of Variables ",ylab=" BIC", type="l")
+points(8, summary(regfit.full)$bic [8], col =" red",cex =2, pch =20)
+
+```
+
+```{r}
+which.max (summary(regfit.full)$adjr2)
+which.min (summary(regfit.full)$cp )
+which.min (summary(regfit.full)$bic )
+```
+
+```{r}
+plot(regfit.full ,scale ="r2")
+```
+
+```{r}
+plot(regfit.full ,scale ="adjr2")
+
+```
+
+
+```{r}
+plot(regfit.full ,scale ="Cp")
+```
+
+```{r}
+plot(regfit.full ,scale ="bic")
+```
+
+
+```{r}
+coef(regfit.full ,11)
+```
+
+
+cross validation 
+
+
+
+```{r}
+test.mat=model.matrix(medv ~., data=boston_test)
+
+```
+
+
+
+```{r}
+val.errors =rep(NA ,13)
+
+for(i in 1:13){
+ coefi=coef(regfit.full ,id=i)
+ pred=test.mat[,names(coefi)]%*% coefi
+ val.errors[i]= mean((boston_test$medv-pred)^2)
+}
+ 
+```
+
+
+```{r}
+val.errors
+```
+MSE on test set was 17.98
+
+
+```{r}
+which.min (val.errors )
+
+coef(regfit.full ,11)
+```
+
+predict fn
+
+```{r}
+predict.regsubsets = function (object ,newdata ,id ,...){
+ form=as.formula(object$call [[2]])
+ mat=model.matrix(form ,newdata )
+ coefi =coef(object ,id=id)
+ xvars =names (coefi )
+ mat[,xvars ]%*% coefi
+ }
+```
+
+
+
+
+find the best 6 variable model of the whole dataset, not just the training set
+
+
+```{r}
+regfit.best=regsubsets(medv ~.,data=Boston ,nvmax =13)
+coef(regfit.best ,11)
+```
+
+different variables chosen with chas and nox and lstst included
+for just trainign there was age tax black instead 
+
+
+10 k folds
+
+
+```{r}
+
+k = 10
+set.seed(1)
+folds=sample(1:k,nrow(Boston ),replace =TRUE)
+cv.errors =matrix(NA ,k,13, dimnames =list(NULL , paste (1:13) ))
+
+
+```
+
+
+
+
+```{r}
+
+for(j in 1:k){
+ best.fit =regsubsets(medv ~.,data=Boston[folds !=j,], nvmax =13)
+ for(i in 1:13) {
+ pred=predict.regsubsets(best.fit ,Boston[folds ==j,], id=i)
+ cv.errors[j,i] = mean( (Boston$medv[folds ==j] - pred)^2)
+ }
+ }
+
+```
+
+
+
+```{r}
+
+mean.cv.errors =apply(cv.errors ,2, mean)
+mean.cv.errors
+plot(mean.cv.errors ,type="b")
+which.min(mean.cv.errors)
+```
+
+
+```{r}
+reg.best =regsubsets(medv ~.,data=Boston, nvmax =13)
+coef(reg.best ,11)
+```
+
+
+
+
+```{r}
+data(Boston)
+
+
+Boston = subset(Boston, select = -indus)
+Boston = subset(Boston, select = -age)
+
+
+
+
+lm1 = lm(medv ~.,data=Boston)  
+summary(lm1)
+```
+
+
+
+
+

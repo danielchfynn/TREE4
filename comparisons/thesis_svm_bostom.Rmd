@@ -1,0 +1,206 @@
+---
+title: "thesis_svm"
+author: "Daniel Fynn"
+date: "2023-08-16"
+output: html_document
+---
+
+support vector machine p352 intro to stat learning
+classifier 
+generalisation of maximal marginal classifier - requires separation by a linear boundary 
+allowing non linear class boundaries 
+svm are for binary classification - can be extended for multi response 
+
+need to choose a separating hyperplane, thus maximal margin hyperplane is used to select 1, it is farthest from the training obs
+can classify with the maximal margin classifier
+margin is perpindicular distance from plane to obs. 
+
+can have overfitting with large p (p-dimensions)
+
+will be using the extension support vector regression 
+
+svr seeks coefficients that minimise a different ttype of loss (not mse), nly using abs(predictors) creater than some value 
+
+can use the e1071 library 
+
+or liblineaR for bigger prolems
+
+
+svm() can be used to fit a regression problem, but passing a numerical response instead of factor
+
+
+```{r}
+
+library(MASS)
+
+
+set.seed(10)
+index = seq(1,506)
+vals = sample(index, 340)
+
+
+Boston$chas = as.factor(Boston$chas)
+Boston$rad = as.factor(Boston$rad)
+
+boston_train = Boston[vals,]
+boston_test = Boston[-vals,]
+
+```
+
+
+
+svr uses ols
+mu svr - determiens proportion of support vectors
+esp svr - determines the cost 
+gamma = 1/ data_dim (12)
+epsilon - insenstive loss fn - the area around the the svm before the cost fn is iniated. 
+
+```{r}
+library (e1071)
+svmfit =svm(medv~., data=boston_train , kernel ="linear", cost =10, scale =TRUE )
+summary (svmfit )
+
+#plot(svmfit,carseats_train)
+```
+
+
+
+cost - cost for a violation to the margin
+scale = FALSE to not scale features to have mean zeo / sd = 1
+
+
+
+tune performs 10-fold cv
+looks at wide range of cost param
+
+```{r}
+set.seed (1)
+tune.out=tune(svm ,medv~., data=boston_train, scale =TRUE,kernel ="linear", ranges =list(cost=c(0.001 , 0.01, 0.1, 1,5,10,100) ))
+
+summary (tune.out)
+```
+
+
+```{r}
+bestmod =tune.out$best.model
+summary (bestmod )
+```
+
+
+```{r}
+plot(bestmod$residuals)
+abline(lm(bestmod$residuals ~ seq(from = 0, to = 340, length.out = 340)))
+
+```
+
+
+looks like white noise
+
+
+
+ prediction
+
+ 
+```{r}
+ypred=predict (bestmod ,boston_test )
+mean((boston_test$medv - ypred)^2)
+
+```
+
+
+
+
+
+
+```{r}
+
+formula_svm = as.formula(paste("Price ~ ."))
+
+
+model = e1071::svm(formula_svm, data=carseats_train , kernel ="linear", cost =10, scale =TRUE)
+
+
+model
+```
+
+
+
+will repeat on the predictors subset form best subset
+
+
+```{r}
+svmfit =svm(Price~ CompPrice+ Sales+ Income+Advertising + ShelveLoc + Age, data=carseats_train , kernel ="linear", cost =10, scale =TRUE )
+summary (svmfit )
+
+
+set.seed (1)
+tune.out=tune(svm ,Price~ CompPrice+ Sales+ Income+Advertising + ShelveLoc + Age, data=carseats_train, scale =TRUE,kernel ="linear", ranges =list(cost=c(0.001 , 0.01, 0.1, 1,5,10,100) ))
+
+summary (tune.out)
+
+
+bestmod =tune.out$best.model
+summary (bestmod )
+
+plot(bestmod$residuals)
+abline(lm(bestmod$residuals ~ seq(from = 0, to = 280, length.out = 280)))
+
+ypred=predict (bestmod ,carseats_test )
+mean((carseats_test$Price - ypred)^2)
+
+```
+
+
+again a better performance using the subset from best subset
+
+
+
+
+Using caret
+
+```{r}
+library(caret)
+library(tidyverse)
+```
+
+```{r}
+train_control = trainControl(method = "cv", number = 5)
+set.seed(50)
+model = train(Price~., data = carseats_train, method = "svmLinear", trControl = train_control,tuneGrid = expand.grid(C =c(0.001 , 0.01, 0.1, 1,5,10,100)))
+print(model)
+
+
+
+```
+
+
+```{r}
+pred_y = predict(model, carseats_test)
+
+mean((carseats_test$Price - pred_y)^2)
+
+#caret::RMSE(carseats_test$Price, pred_y)
+
+```
+
+
+
+```{r}
+set.seed(50)
+model = train(Price~ CompPrice+ Sales+ Income+Advertising + ShelveLoc + Age, data = carseats_train, method = "svmLinear", trControl = train_control,tuneGrid = expand.grid(C =c(0.001 , 0.01, 0.1, 1,5,10,100)))
+print(model)
+
+
+pred_y = predict(model, carseats_test)
+
+mean((carseats_test$Price - pred_y)^2)
+
+#caret::RMSE(carseats_test$Price, pred_y)
+
+```
+
+ slightly better better mse
+ 
+ 
+ 
+ 
