@@ -110,4 +110,49 @@ uploaded prova_twoing_regression.ipynb - but this can also be implemented from p
 also the comparison sheets have been uploaded in comparisons folder for scikit, r, and matlab
 
 
-  
+
+20/2/24
+
+Have reworked parts of CARTplus to allow for the use of ndarrays as input. this makes it run quite a bit faster
+
+attached will be two example worksheets showing this method
+
+Also i have updated the best_split for regressions to take the midway points between consecutive ordered values, as done in tree and matlab fitrtree
+
+Also i have made a possible adimission for classification trees, where if the class of two children from one parents have the same value, this will prune. This can be passed in the print_tree and prunign option, under a boolean merge_leaves. This is the same as matlab fitctree (this will work for regreesion trees if two branches have exactly the same values, so unlikely to affect) 
+This has been trialed with Carseats_train dataset, and gives the same result as the pruned tree, so havent seen how to deviate this yet. 
+
+Visual pruning is in place. Have some questions about it, but it looks ok. Has an option within the program to be upward growing or downward growin, have left it downward, but would be an easy parameter to make if needed. 
+
+At the moment using the node proportion gain to define the change of length in the y plane. The node proportion gain is the difference between including the split and not. 
+
+
+the node proportion total is defined for a classifier as:
+
+gini value of the initial y - \sum_L [1 - \sum_C(n_C / n_L)^2]*(n_L/n)
+
+L is for leaves C is for classes. 
+
+
+for regression is the:
+
+\sum_L n_L (\mu_L - \hat{y})^2 / pvariance (y) 
+
+
+
+
+
+
+- ALso added the deviance value for the final table, and can see the values are the same as tree library. I found a deviance formula from teh MASS textbook - very similar to entropy 
+
+D_i = -2 * sum_k (n_ik log p_ik) 
+
+the difference with entropy is it is natural log not log 2, and the coefficient
+
+
+
+
+Added a new class named k-folds to the CARTplus library. Esentially takes as input the same values as CART, plus a k value for the amoutn of folds. At the moment it just print the errors for each model, as well as the average error. and it stores the models if wanted for later use. 
+
+
+All these sections have been updated on the Overleaf for instructions
