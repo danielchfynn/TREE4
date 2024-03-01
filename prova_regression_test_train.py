@@ -1,7 +1,7 @@
 #from __future__ import annotations
 #from tkinter import N
 
-from cart_2805 import *
+from TREEplus import *
 
 import pandas as pd
 
@@ -16,7 +16,7 @@ import pandas as pd
 #####################################loading the carseats data#########################
 
 df=pd.read_csv('Carseats_train.csv')
-df=df.iloc[:,1:]
+#df=df.iloc[:,1:]
 
 features_names=list(df.columns)
 
@@ -105,7 +105,7 @@ features_names = features_names3 +  features_names4
 
 #############Data Prep for prediction ############
 df_test=pd.read_csv('Carseats_test.csv')
-df_test=df_test.iloc[:,1:]
+#df_test=df_test.iloc[:,1:]
 
 
 features_test=df_test.iloc[:,0:6]
@@ -158,21 +158,21 @@ def user_fn(self, node): #impur just takes node in CART
 
 my_tree = MyNodeClass('n1', indici) 
 
-cart = CART(y,features,features_names,n_features,n_features_names, impurity_fn = "between_variance", problem="regression", method = "CART", min_cases_parent= 10,min_cases_child= 5) 
+tree = TREEplus(y,features,features_names,n_features,n_features_names, impurity_fn = "pearson", problem="regression", method = "TWO-STAGE", min_cases_parent= 10,min_cases_child= 5) 
 
-cart.growing_tree(my_tree)
+tree.growing_tree(my_tree)
 
-cart.print_tree()
-
-
-#alpha = cart.pruning(features_test, n_features_test, y_test)
-
-#cart.print_alpha(alpha)
+#tree.print_tree()
 
 
-#cart.print_tree()
+#alpha = tree.pruning(features_test, n_features_test, y_test)
 
-#alpha = cart.pruning()
+#tree.print_alpha(alpha)
+
+
+tree.print_tree()
+
+#alpha = tree.pruning()
 
 
 
@@ -187,11 +187,11 @@ d.update(dn)
 
 
 
-for list in cart.tree:
+for list in tree.tree:
     for tuple in list:
             for node in tuple:
                 if node.name =="n1":
-                    cart.pred_x(node, d)
+                    tree.pred_x(node, d)
 '''
 
 '''
