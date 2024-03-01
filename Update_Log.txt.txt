@@ -156,3 +156,7 @@ Added a new class named k-folds to the CARTplus library. Esentially takes as inp
 
 
 All these sections have been updated on the Overleaf for instructions
+
+
+1/3/24
+Updating cartplus to treeplus and other small changes 
