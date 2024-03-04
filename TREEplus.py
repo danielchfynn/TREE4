@@ -82,6 +82,7 @@ class MyNodeClass(NodeMixin):  # Add Node feature #MyBaseClass
         self.to_pop = to_pop
         
         self.deviance = 0 
+        self.surrogate_splits = [] #[stumps, variables, splits, between_var ]
 
     def get_value(self, y, problem):
         '''
@@ -244,7 +245,6 @@ class MyNodeClass(NodeMixin):  # Add Node feature #MyBaseClass
             else :
                 print("Var name is not among the supplied features!")
                 return
-
         else:
             if var_name in feat:         #is_numeric(var) :      # split for numerical variables
                 #var = self.features[var_name]    # obtains the var column by identifiying the feature name 
@@ -312,7 +312,8 @@ class TREEplus:
                  min_cases_parent = 10, 
                  min_cases_child = 5, 
                  min_imp_gain=0.01, 
-                 max_level = 10):
+                 max_level = 10, 
+                 surrogate_split = False):
 
         self.y = y
         self.features = features #needs to be an object that can be have its elements accessed with features[var] nomenculature
@@ -325,6 +326,7 @@ class TREEplus:
         self.user_impur = user_impur
         self.max_level = max_level
         self.twoing = twoing
+        self.surrogate_split = surrogate_split
 
         self.dict_to_dataframe()
 
@@ -363,7 +365,7 @@ class TREEplus:
         self.nsplit = 0
         self.father = []
         self.root = []
-        self.tree = []
+        self.tree = [] #made up of the parents and children [[(p,c,c)]] like this per object 
         self.father_to_pop = []
         self.node_prop_list = []
         self.node_prop_dict = {}
@@ -634,6 +636,7 @@ class TREEplus:
         between_variance=[]
         splits=[]
         variables=[]
+        stumps = []
         distinct_values=np.array([])
         t=0
         k = False
@@ -702,7 +705,13 @@ class TREEplus:
 
                                     var1, var2 = variables[best_index].split("__")
                                     self.n_features[variables[best_index]] = self.n_features[var1] + self.n_features[var2]
-                                    return variables[best_index], tuple(splits[best_index]), between_variance[best_index] 
+                                    
+                                    self.nss_variables = variables
+                                    self.nss_splits = splits
+                                    self.nss_between_variance = between_variance
+                                    self.nss_stumps = stumps
+
+                                    return variables[best_index], tuple(splits[best_index]), between_variance[best_index], stumps[best_index]
                                 else:
                                     print("No splits found")
                                     return None
@@ -766,7 +775,7 @@ class TREEplus:
                                 impur1 = self.impur(stump[1])
 
                                 splits.append(split) #had list around it , had -1index
-                                #between_variance.append(error)
+                                stumps.append(stump)
                                 if combination_split:
                                     variables.append(comb_split)
                                 else:
@@ -778,6 +787,7 @@ class TREEplus:
                                 if self.impurity_fn =="entropy":
                                     entropy_parent = self.impur(node)
                                     inf_gain = entropy_parent - ((len(stump[0].indexes) / len(node.indexes)) * impur0 + (len(stump[1].indexes) / len(node.indexes)) * impur1)
+                                    
                                     between_variance.append(inf_gain)                                
                                 else:
                                     between_variance.append((impur0) + (impur1)) 
@@ -798,8 +808,14 @@ class TREEplus:
                                 var1, var2 = variables[best_index].split("__")
                                 #print("combs", self.n_features[var1][0:5], self.n_features[var2][0:5])
                                 self.n_features[variables[best_index]] = self.n_features[var1] + self.n_features[var2]
-                                
-                            return variables[best_index], tuple(splits[best_index]), between_variance[best_index]    #"latent_budget_tree doesnt return an error" 
+                            
+                            
+                            self.nss_variables = variables
+                            self.nss_splits = splits
+                            self.nss_between_variance = between_variance
+                            self.nss_stumps = stumps    
+                            
+                            return variables[best_index], tuple(splits[best_index]), between_variance[best_index], stumps[best_index]    #"latent_budget_tree doesnt return an error" 
                         else:
                             continue
 
@@ -809,19 +825,22 @@ class TREEplus:
 
                 new_df = pd.DataFrame({"Function":"nodesearch b4 order ", "Lines":798, "Time": time.time() - self.start}, index = [0])
                 self.time = pd.concat([self.time, new_df], ignore_index=True, sort=False)
+                
                 if self.problem == "classifier":
                     ordered_list = self.tau_ordering(node)  
                 else:
                     ordered_list = self.pearson_ordering(node) 
                 #print("ordered_list",ordered_list)
+                
                 new_df = pd.DataFrame({"Function":"nodesearch after order ", "Lines":805, "Time": time.time() - self.start}, index = [0])
                 self.time = pd.concat([self.time, new_df], ignore_index=True, sort=False)
                 
                 k = 0 #iterator 
                 while k < len(ordered_list)-1:       #stopping rule 
-                    between_variance=[]
-                    splits=[]
-                    variables=[]
+                    between_variance_k=[]
+                    splits_k=[]
+                    variables_k=[]
+                    stumps_k = []
                     
                     if ordered_list[k][1] in self.n_features_names:
                         cat_var = [ordered_list[k][1]]
@@ -862,17 +881,23 @@ class TREEplus:
                                 if self.problem == 'classifier' and self.impurity_fn == "tau":    
                                     gini_parent = self.impur(node)
                                     tau = (impur0 * len(stump[0].indexes) / len(node.indexes) + impur1 * len(stump[1].indexes)/ len(node.indexes) - gini_parent) / (1- gini_parent)
+                                    between_variance_k.append(tau)
                                     between_variance.append(tau)
                                 elif self.problem == "regression" and self.impurity_fn == "pearson": 
                                     impurities_1.append(impur0)
                                     impurities_1.append(impur1)
-                                    between_variance.append(1- sum(impurities_1[t:]) / self.tss(node)) #exploratory slides 43
+                                    between_variance_k.append(1- sum(impurities_1[t:]) / self.tss(node)) #exploratory slides 43
+                                    between_variance.append(1- sum(impurities_1[t:]) / self.tss(node))
                                 else:
                                     print("Error, Two-Stage and FAST algorithm require impurity_fn as tau for classifier, \
                                           and pearson for regression")
                                     return None
+                                splits_k.append(i)
                                 splits.append(i)
+                                variables_k.append(str(var))
                                 variables.append(str(var))
+                                stumps_k.append(stump)
+                                stumps.append(stump)
                                 t+=2
                             else:
                                 continue
@@ -880,10 +905,7 @@ class TREEplus:
                         #    print("NaN found in observation")
                         #    continue            
                         
-                    for var in num_var:
-                        #df = pd.DataFrame(self.features[str(var)])
-                        #if not df[str(var)].isnull().values.any():  
-                        
+                    for var in num_var:                      
 
                         for i in self.midway_points(var,node):#range(len(set(self.features[str(var)][node.indexes]))): 
                                 stump = node.bin_split(self.features, self.n_features, str(var), i)#self.features[str(var)][i])
@@ -894,18 +916,24 @@ class TREEplus:
                                     if self.problem == 'classifier' and self.impurity_fn == "tau":    
                                         gini_parent = self.impur(node)
                                         tau = (impur0 * len(stump[0].indexes) / len(node.indexes) + impur1 * len(stump[1].indexes)/ len(node.indexes) - gini_parent) / (1- gini_parent)
+                                        between_variance_k.append(tau)
                                         between_variance.append(tau)
                                     elif self.problem == "regression" and self.impurity_fn == "pearson": 
                                         impurities_1.append(impur0)
                                         impurities_1.append(impur1)
+                                        between_variance_k.append(1- sum(impurities_1[t:])/ self.tss(node))
                                         between_variance.append(1- sum(impurities_1[t:])/ self.tss(node))
-                                        #print("between", between_variance[-1], str(var),self.features[str(var)][i])
+                                       
                                     else:
                                         print("Error, Two-Stage and FAST algorithm require impurity_fn as tau for classifier, \
                                           and pearson for regression")
                                         return None
-                                    splits.append(i)#self.features[str(var)][i])
+                                    splits_k.append(i)#self.features[str(var)][i])
+                                    splits.append(i)
+                                    variables_k.append(str(var))
                                     variables.append(str(var))
+                                    stumps_k.append(stump)
+                                    stumps.append(stump)
                                     t+=2
                                 else: 
                                     continue
@@ -914,22 +942,31 @@ class TREEplus:
                         #    continue 
                     try:                  
                         if k == 0:
-                            s_star_k = max(between_variance)  
-                            s_star_k_between = between_variance[between_variance.index(max(between_variance))] 
-                            s_star_k_split = splits[between_variance.index(max(between_variance))]
-                            s_star_k_variables = variables[between_variance.index(max(between_variance))]
-                            if self.method == "TWO-STAGE" and max_k == 1:                              
-                                return s_star_k_variables, s_star_k_split, s_star_k_between
+                            #evaluation for the current k 
+                            s_star_k = max(between_variance_k)  
+                            s_star_k_between = between_variance_k[between_variance_k.index(max(between_variance_k))] 
+                            s_star_k_split = splits_k[between_variance_k.index(max(between_variance_k))]
+                            s_star_k_variable = variables_k[between_variance_k.index(max(between_variance_k))]
+                            s_star_k_stump = stumps_k[between_variance_k.index(max(between_variance_k))]
+                            if self.method == "TWO-STAGE" and max_k == 1: 
+                                
+                                self.nss_variables = variables
+                                self.nss_splits = splits
+                                self.nss_between_variance = between_variance
+                                self.nss_stumps = stumps                             
+                                
+                                return s_star_k_variable, s_star_k_split, s_star_k_between, s_star_k_stump 
                     except:
                         k += 1
                         s_star_k = 0
                         continue
                     try:
-                        if k != 0 and max(between_variance) > s_star_k:
-                            s_star_k = max(between_variance) 
-                            s_star_k_between = between_variance[between_variance.index(max(between_variance))]
-                            s_star_k_split = splits[between_variance.index(max(between_variance))]
-                            s_star_k_variables = variables[between_variance.index(max(between_variance))]
+                        if k != 0 and max(between_variance_k) > s_star_k:
+                            s_star_k = max(between_variance_k) 
+                            s_star_k_between = between_variance_k[between_variance_k.index(max(between_variance_k))]
+                            s_star_k_split = splits_k[between_variance_k.index(max(between_variance_k))]
+                            s_star_k_variable = variables_k[between_variance_k.index(max(between_variance_k))]
+                            s_star_k_stump = stumps_k[between_variance_k.index(max(between_variance_k))]
                     except: 
                         k +=1 #failing minimum child size condition
                         continue
@@ -937,20 +974,38 @@ class TREEplus:
                     
                     if self.method == "TWO-STAGE":
                         if max_k == 1:         ##if initial iteration fails to get a result  #len(s_star_k_between) == 1 had previous, but to get to this point cant have error
-                            return s_star_k_variables, s_star_k_split, s_star_k_between
+                            self.nss_variables = variables
+                            self.nss_splits = splits
+                            self.nss_between_variance = between_variance
+                            self.nss_stumps = stumps
+                            return s_star_k_variable, s_star_k_split, s_star_k_between, s_star_k_stump
                         elif k >= max_k-1:
-                            return s_star_k_variables, s_star_k_split, s_star_k_between
+                            self.nss_variables = variables
+                            self.nss_splits = splits
+                            self.nss_between_variance = between_variance
+                            self.nss_stumps = stumps
+                            return s_star_k_variable, s_star_k_split, s_star_k_between, s_star_k_stump
                         else:
                             k +=1
                     if self.method == "FAST":
                         if s_star_k < ordered_list[k+1][0] :  #termination for FAST algoirthm
                             k += 1
                         else:
-                            return s_star_k_variables, s_star_k_split, s_star_k_between
+                            self.nss_variables = variables
+                            self.nss_splits = splits
+                            self.nss_between_variance = between_variance
+                            self.nss_stumps = stumps
+
+                            return s_star_k_variable, s_star_k_split, s_star_k_between, s_star_k_stump
                     
                 
                 try:
-                    return s_star_k_variables, s_star_k_split, s_star_k_between #if all fails after all variables 
+                    self.nss_variables = variables
+                    self.nss_splits = splits
+                    self.nss_between_variance = between_variance
+                    self.nss_stumps = stumps
+
+                    return s_star_k_variable, s_star_k_split, s_star_k_between, s_star_k_stump #if all fails after all variables 
                 except:
                     return None
         
@@ -991,9 +1046,11 @@ class TREEplus:
                                 impurities_1.append(impur0)
                                 impurities_1.append(impur1)
                                 between_variance.append(sum(impurities_1[t:]))
-                        
+                                
+
                             splits.append(i)
                             variables.append(str(var))
+                            stumps.append(stump)
                             t+=2
                             #print(splits[-1], variables[-1], between_variance[-1])
                     else:
@@ -1025,6 +1082,7 @@ class TREEplus:
                             
                             splits.append(i)#self.features[str(var)][i])
                             variables.append(str(var))
+                            stumps.append(stump)
                             t+=2
                         else: 
                             continue
@@ -1037,9 +1095,20 @@ class TREEplus:
             #print("max",max(between_variance))
             if self.method == "LATENT-BUDGET-TREE":
                 #print("betweenvar", between_variance)
-                return variables[between_variance.index(max(between_variance))],tuple(splits[between_variance.index(max(between_variance))]),between_variance[between_variance.index(max(between_variance))]
+                self.nss_variables = variables
+                self.nss_splits = splits
+                self.nss_between_variance = between_variance
+                self.nss_stumps = stumps
+
+                return variables[between_variance.index(max(between_variance))],tuple(splits[between_variance.index(max(between_variance))]),between_variance[between_variance.index(max(between_variance))], stumps[between_variance.index(max(between_variance))]
             else:
-                return variables[between_variance.index(max(between_variance))],splits[between_variance.index(max(between_variance))],between_variance[between_variance.index(max(between_variance))]
+
+                self.nss_variables = variables
+                self.nss_splits = splits
+                self.nss_between_variance = between_variance
+                self.nss_stumps = stumps
+                    
+                return variables[between_variance.index(max(between_variance))],splits[between_variance.index(max(between_variance))],between_variance[between_variance.index(max(between_variance))], stumps[between_variance.index(max(between_variance))]
         except:
             #this is mostly an error where the length is less than min size 
             if len(node.indexes) < self.grow_rules['min_cases_parent']:
@@ -1055,6 +1124,30 @@ class TREEplus:
             return None
     
 
+    def surrogate_splits(self,node, match = 0.65):
+        '''Attaches the possible surrogate splits to the node object'''
+
+        bestvar = self.nss_variables[self.nss_between_variance.index(max(self.nss_between_variance))]
+        beststump = self.nss_stumps[self.nss_between_variance.index(max(self.nss_between_variance))]
+
+        leftind = Counter(beststump[0].indexes) #changes it into a dict
+        rightind = Counter(beststump[1].indexes) 
+
+        for i in self.nss_stumps:
+            if i != beststump and self.nss_variables[self.nss_stumps.index(i)] != bestvar:
+                leftmatch = len(set(leftind).intersection(Counter(i[0].indexes))) / len(beststump[0].indexes)
+                rightmatch = len(set(rightind).intersection(Counter(i[1].indexes))) / len(beststump[1].indexes)
+
+                if leftmatch > match and rightmatch > match:
+                    match = False
+                    for j in node.surrogate_splits:
+                        if j[1] == self.nss_variables[self.nss_stumps.index(i)] and j[2]== self.nss_splits[self.nss_stumps.index(i)]:
+                            match = True
+                    if not match:
+                        node.surrogate_splits.append([i, self.nss_variables[self.nss_stumps.index(i)], self.nss_splits[self.nss_stumps.index(i)], self.nss_between_variance[self.nss_stumps.index(i)] ])
+
+    
+    
     def control(self):
         for i in self.get_leaf():
             for j in self.get_leaf():
@@ -1193,7 +1286,11 @@ class TREEplus:
                             new_df = pd.DataFrame({"Function":"growing_tree twoing b4 split", "Lines":1190, "Time": time.time() - self.start}, index = [0])
                             self.time = pd.concat([self.time, new_df], ignore_index=True, sort=False)
 
-                            value,soglia,varian = self.__node_search_split(node, max_k, combination_split, max_c)  
+                            value,soglia,varian, stump = self.__node_search_split(node, max_k, combination_split, max_c) 
+
+                            if self.surrogate_split:
+                                self.surrogate_splits(node)
+
                         except TypeError:
                             #print("TypeError [Twoing, pure node after new class assignment]")                    
                             if len(node.indexes) >= self.grow_rules['min_cases_parent']:
@@ -1209,7 +1306,7 @@ class TREEplus:
                         twoing_varian.append(varian)
 
                 if twoing_varian:
-                #evaluarion of best split from all splits 
+                    #evaluarion of best split from all splits 
                     best_index = twoing_varian.index(max(twoing_varian))
                     value = twoing_value[best_index]                            #gets all values back into a recognizable form 
                     soglia = twoing_soglia[best_index]
@@ -1225,7 +1322,6 @@ class TREEplus:
                     self.twoing_y = pd.concat([self.twoing_y, y])
 
                     self.y = yold #hopefully this works used set function, maybe needs it 
-                    #print(c1[best_index], len(twoing_value), len(self.y[node.indexes]), len(set(self.y[node.indexes])))
 
                 else:
                     self.y = yold
@@ -1236,8 +1332,7 @@ class TREEplus:
                 
                 yold = self.y
                 y = pd.DataFrame(self.y[node.indexes], index = node.indexes) #hopefully no issues if it is passed as a dataframe
-                #print(y.index)
-                #y = y[node.indexes]
+       
                 y.rename(columns = {y.columns[0] : "y"}, inplace= True)
                 y["twoing"] = 0
 
@@ -1317,7 +1412,11 @@ class TREEplus:
                     else:
                         self.impurity_fn = "tau"
                     try:
-                        value,soglia,varian = self.__node_search_split(node, max_k, combination_split, max_c)  
+                        value,soglia,varian, stump = self.__node_search_split(node, max_k, combination_split, max_c) 
+
+                        if self.surrogate_split:
+                            self.surrogate_splits(node) 
+
                     except TypeError:
                         #print("TypeError [Twoing, pure node after new class assignment]")                    
                         if len(node.indexes) >= self.grow_rules['min_cases_parent']:
@@ -1350,7 +1449,6 @@ class TREEplus:
                     y.rename(columns = {y.columns[0] : node.name}, inplace= True) #that way can find it based on the name of the ndoe of the split 
                     self.twoing_y = pd.concat([self.twoing_y, y])
                     self.y = yold #hopefully this works used set function, maybe needs it 
-                    #print(c1[best_index], len(twoing_value), len(self.y[node.indexes]), len(set(self.y[node.indexes])))
                     
                     self.problem = "regression"
                     if self.method == "CART":
@@ -1367,8 +1465,6 @@ class TREEplus:
                         self.impurity_fn = "pearson"
                     return None 
 
-
-
             else:
                 print("Problem must either be classifier or regression")
                 return None
@@ -1377,7 +1473,11 @@ class TREEplus:
                 self.start2 = time.time()
                 new_df = pd.DataFrame({"Function":"growing_tree b4 split", "Lines":1351, "Time": time.time() - self.start}, index = [0])
                 self.time = pd.concat([self.time, new_df], ignore_index=True, sort=False)
-                value,soglia,varian = self.__node_search_split(node, max_k, combination_split, max_c)  
+                
+                value,soglia,varian,stump = self.__node_search_split(node, max_k, combination_split, max_c)  
+
+                if self.surrogate_split:
+                    self.surrogate_splits(node)
 
             except TypeError:
                 print("TypeError: Node search split (CART) failure")
@@ -1393,20 +1493,27 @@ class TREEplus:
         self.root.append((value_soglia_variance,rout))
 
         #chunk of appending
+        #recreate split from node search split 
+
         left_node,right_node = node.bin_split(self.features, self.n_features, str(value),soglia)
+        #left_node,right_node  = stump[0],stump[1] #the last bin_split sets teh node.split variable so have to run though again at the end, not use pre-existing. 
+                
         node.set_children((left_node,right_node))
         node.set_split(value_soglia_variance)
         node.varian = varian
         mini_tree.append((node,left_node,right_node))
         self.tree.append(mini_tree) 
-        self.bigtree.append(node)
-        if rout != 'start': #checks the position of the current node, either start, left, right from the previous node
+
+        if rout != 'start': 
             self.father.append(node) # may be redundant with the same appending happenign below
-        self.bigtree.append(node)#append nodo padre
+        
+        if rout == "start":
+            self.bigtree.append(node)#append nodo padre
+        
         self.bigtree.append(left_node)#append nodo figlio sinistro
         self.bigtree.append(right_node)#append nodo figlio desto
         
-        print("Split Found: ",node.name, value_soglia_variance,rout)
+        print("Split Found: ",node.name, value_soglia_variance,rout, node, node.split)
 
         ###### Calcolo della deviance nel nodo  
         if rout == 'start':
@@ -1497,6 +1604,7 @@ class TREEplus:
              #   return None
         
         self.nsplit += 1
+
         return self.growing_tree(left_node,"left",max_k = max_k, combination_split = combination_split, max_c = max_c),self.growing_tree(right_node,"right",max_k = max_k, combination_split = combination_split, max_c = max_c)
 
     def merge_leaves(self, all_node = None, leaves = None):
