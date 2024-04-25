@@ -156,7 +156,7 @@ def user_fn(self, node): #impur just takes node in CART
     return (mean(self.y[node.indexes])**2)*len(self.y[node.indexes])
 
 
-my_tree = MyNodeClass('n1', indici) 
+my_tree = NodeClass('n1', indici) 
 
 tree = TREEplus(y,features,features_names,n_features,n_features_names, impurity_fn = "pearson", problem="regression", method = "TWO-STAGE", min_cases_parent= 10,min_cases_child= 5) 
 
