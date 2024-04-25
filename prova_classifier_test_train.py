@@ -140,7 +140,7 @@ def user_fn(self, node): #impur just takes node in CART
 
 
 start = time.time()
-my_tree = MyNodeClass('n1', indici) 
+my_tree = NodeClass('n1', indici) 
 tree = TREEplus(y,features,features_names,n_features,n_features_names,impurity_fn = "gini",problem="classifier",method = "CART",max_level = 10, min_cases_parent= 10,min_cases_child= 5,min_imp_gain=0.0001) 
 
 
