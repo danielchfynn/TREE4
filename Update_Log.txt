@@ -212,3 +212,5 @@ Pypi uploads required a change in name of the library from TREEplus to TREE4.
 TREE4 can be pip installed 
 And teh objects in the library activated by TREE4.TREE4 import *
 Also uploaded the reference manual 
+Made a change to the font size of hover text for readability
+made a change to lba fucntion only allowing more than 1 row item for the cross tables passed to lba function 

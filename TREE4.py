@@ -755,19 +755,19 @@ class TREE4:
                         else:
                             #creates crosstable                      
                             cont = pd.crosstab(index = df[ordered_list[k][1]], columns= df["y"], normalize = 'index')
-                        
+                            if cont.shape[0] <=1: #implemented to avoid errors in lba 
+                                continue
                         #converts into an r dataframe
                         with (robjects.default_converter + pandas2ri.converter).context():
                             cont_r = robjects.conversion.get_conversion().py2rpy(cont)
-                        
+
                         #new_df = pd.DataFrame({"Function":"nodesearch before model lbt", "Lines":714, "Time": time.time() - self.start}, index = [0])
                         #self.time = pd.concat([self.time, new_df], ignore_index=True, sort=False)
-
                         try:
                             robjects.r.assign("cont_r", cont_r)
                             robjects.r("cont_r <-  as.matrix(cont_r)")
                             robjects.r("set.seed(2)")
-                            robjects.r("suppressWarnings(suppressMessages(out <- lba(cont_r, K = 2 , what = 'outer', method = 'ls', trace.lba = FALSE)))")
+                            robjects.r("suppressWarnings(suppressMessages(out <- lba(cont_r, K = 2 , what = 'outer', method = 'ls', trace.lba = FALSE)))") 
                             robjects.r("alpha <- out$A")
                             alpha = robjects.r('alpha')
                             alpha = np.asarray(alpha)
@@ -2319,9 +2319,9 @@ class TREE4:
             if child in parent_children:            #Continues the growing only if the child has a key value in parent_children, and therefore has children
                 self.build_tree_recursively_render(child, child_node, parent_children,all_node,leaf_list, leaf_dict)
         
-    def print_tree(self, all_node = None,leaf= None, filename="TREE4_tree.png", treefile = "tree.dot", table = False, html = False, print_render = False, visual_pruning = False, merge_leaves = False):
+    def print_tree(self, all_node = None,leaf= None, filename="TREEplus_tree.png", treefile = "tree.dot", table = False, html = False, print_render = False, visual_pruning = False, merge_leaves = False):
         '''Print a visual representation of the formed tree, showing splits at different branches and the mean of the leaves/ terminal nodes.'''
-        #start = time.time()
+        start = time.time()
         if not all_node:
             all_node = self.get_all_node()
         if not leaf:
@@ -2341,6 +2341,7 @@ class TREE4:
             father_list.append(int(node.name[1:]))
             father_dict[node] = int(node.name[1:])
 
+        
         parent_child =[]                            #list for having child with their parent, for use in dictionary below
         for node in all_node:
             if (int(node.name[1:]) *2) in father_list:
@@ -2406,6 +2407,8 @@ class TREE4:
         lay = G.layout_reingold_tilford(root=[0])
         position = {k: lay[k-1] for k in father_list}               # assigning nodes to positions , using reigngold layout
         
+        
+        
         #visual prunign 2nd attempt
         if visual_pruning:   #problem if the split with the highest purity gain is not the first, aka, lbt
           
@@ -2430,6 +2433,7 @@ class TREE4:
                             for child in new_dict[j][1]:
                                 position[int(child.name[1:])] = [position[int(child.name[1:])][0], position[int(child.name[1:])][1] + node_prop_gain[i]]           
             
+
             else:
                 #attempt 2 at a downward tree 
                 for i in position:
@@ -2573,7 +2577,9 @@ class TREE4:
                                         ),
                         text=labels,
                         hoverinfo='text',
-                        opacity=0.8
+                        opacity=0.8, 
+                        hoverlabel = dict(font_size = 20)
+
                         ))
         
         fig.update_layout(
@@ -2583,8 +2589,10 @@ class TREE4:
             plot_bgcolor='rgba(0, 0, 0, 0)',
             xaxis={'visible': False, 'showticklabels': False},    
             #    title=filename[:-4],    #chops off ".png"
+            
             )
         
+
         if not visual_pruning:
             fig.update_layout(
                 yaxis={'visible': False, 'showticklabels': True}
@@ -2597,8 +2605,8 @@ class TREE4:
 
         fig.show()
         if html:
-            fig.write_html("TREE4_tree.html")
-            webbrowser.open_new_tab("TREE4_tree.html")
+            fig.write_html("TREEplus_tree.html")
+            webbrowser.open_new_tab("TREEplus_tree.html")
 
         #print("after tree formed", time.time()- start)
 
