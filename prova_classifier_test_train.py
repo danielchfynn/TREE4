@@ -1,5 +1,5 @@
 from __future__ import annotations
-from TREEplus import *
+from TREE4.TREE4 import *
 import pandas as pd
 
 #d = dict(features, **n_features)  #merges the two dicts
@@ -141,7 +141,7 @@ def user_fn(self, node): #impur just takes node in CART
 
 start = time.time()
 my_tree = NodeClass('n1', indici) 
-tree = TREEplus(y,features,features_names,n_features,n_features_names,impurity_fn = "gini",problem="classifier",method = "CART",max_level = 10, min_cases_parent= 10,min_cases_child= 5,min_imp_gain=0.0001) 
+tree = TREE4(y,features,features_names,n_features,n_features_names,impurity_fn = "gini",problem="classifier",method = "CART",max_level = 10, min_cases_parent= 10,min_cases_child= 5,min_imp_gain=0.0001) 
 
 
 tree.growing_tree(my_tree)
