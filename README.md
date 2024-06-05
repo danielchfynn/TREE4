@@ -1,7 +1,7 @@
-# CART_thesis
+# TREE4
 
 Python Dependencies
-Python Version 3.8.15
+Python Version 3.8.15 or others 
 Numpy Version: 1.23.4
 Anytree Version: 2.8.0
 Matplotlib Version: 3.6.2
