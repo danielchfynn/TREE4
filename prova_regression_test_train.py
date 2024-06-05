@@ -1,7 +1,7 @@
 #from __future__ import annotations
 #from tkinter import N
 
-from TREEplus import *
+from TREE4.TREE4 import *
 
 import pandas as pd
 
@@ -158,7 +158,7 @@ def user_fn(self, node): #impur just takes node in CART
 
 my_tree = NodeClass('n1', indici) 
 
-tree = TREEplus(y,features,features_names,n_features,n_features_names, impurity_fn = "pearson", problem="regression", method = "TWO-STAGE", min_cases_parent= 10,min_cases_child= 5) 
+tree = TREE4(y,features,features_names,n_features,n_features_names, impurity_fn = "pearson", problem="regression", method = "TWO-STAGE", min_cases_parent= 10,min_cases_child= 5) 
 
 tree.growing_tree(my_tree)
 
