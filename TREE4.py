@@ -2319,7 +2319,7 @@ class TREE4:
             if child in parent_children:            #Continues the growing only if the child has a key value in parent_children, and therefore has children
                 self.build_tree_recursively_render(child, child_node, parent_children,all_node,leaf_list, leaf_dict)
         
-    def print_tree(self, all_node = None,leaf= None, filename="TREEplus_tree.png", treefile = "tree.dot", table = False, html = False, print_render = False, visual_pruning = False, merge_leaves = False):
+    def print_tree(self, all_node = None,leaf= None, filename="TREE4_tree.png", treefile = "tree.dot", table = False, html = False, print_render = False, visual_pruning = False, merge_leaves = False):
         '''Print a visual representation of the formed tree, showing splits at different branches and the mean of the leaves/ terminal nodes.'''
         start = time.time()
         if not all_node:
@@ -2605,8 +2605,8 @@ class TREE4:
 
         fig.show()
         if html:
-            fig.write_html("TREEplus_tree.html")
-            webbrowser.open_new_tab("TREEplus_tree.html")
+            fig.write_html("TREE4_tree.html")
+            webbrowser.open_new_tab("TREE4_tree.html")
 
         #print("after tree formed", time.time()- start)
 
@@ -3167,3 +3167,765 @@ class k_folds():
             errors = [True]*len(y_list)
 
         return errors
+    
+
+#^kfolds
+###########################################
+#ADABOOST
+
+# Importing libraries 
+
+#not sure if it needs to be in a class 
+    
+  
+class Adaboost:
+
+    def __init__(self, df, feature_var, num_var, cat_var, _problem, impurity_fn,  method = "CART", weak_learners = 11 , max_level = 0):
+        self.df = df
+        self.feature_var = feature_var
+        self.num_var = num_var
+        self.cat_var = cat_var
+        self._problem = _problem
+        self.impurity_fn = impurity_fn
+        self.weak_learners = weak_learners
+        self.method = method
+        self.max_level = max_level #max level 0 creates the stump
+    
+
+        impurity_fns = ["gini", "entropy", "between_variance", "pearson", "tau"]
+
+        if impurity_fn not in impurity_fns:
+            print("Name Error: impurity_fn must be in ['gini', 'entropy', 'between_variance', 'pearson', 'tau']")
+            #return None
+        
+        methods = ['CART', 'TWO-STAGE', 'FAST', 'LATENT-BUDGET-TREE']
+
+        if method not in methods:
+            print("Name Error: method must be in ['CART', 'TWO-STAGE', 'FAST', 'LATENT-BUDGET-TREE']")
+            #return None
+        
+
+
+    def add_weights(self):#, df, first = True):
+        '''Adding initial weights : w = 1/n'''
+        
+        w = [1/ self.df.shape[0] for i in range(self.df.shape[0]) ]
+        self.df["weights"] = w                                    #using a dataframe or dictionary setup
+            
+        self.first = False
+        
+
+    
+    #could add the alpha and overall errors into a container to be viewed on the outside
+    def update_weights(self, alpha, overall_errors):
+        '''This is for updating weights, based on whether the observation was correctly predicted'''
+
+        #For a regression problem, the alpha value contains some information about the degree of the change, an innovation. 
+
+        for i in range(len(self.df["weights"])):
+            if overall_errors[i] == True:
+                self.df["weights"][i] = self.df["weights"][i] * math.exp(alpha)
+            elif overall_errors[i] == False:
+                self.df["weights"][i] = self.df["weights"][i] * math.exp(-alpha) #correctly classified == False
+        
+        #normalise
+        for i in range(len(self.df["weights"])):
+            self.df["weights"][i] = self.df["weights"][i] / self.df["weights"].sum()
+        
+        cum_sum = [0]
+        for i in range(len(self.df["weights"])):
+            cum_sum.append(self.df["weights"][i]+cum_sum[-1])
+        
+        cum_sum.pop(0)
+        cum_sum[-1] = 1
+        
+        self.df["cum_sum"] = cum_sum
+        
+        
+
+
+    def new_df(self):
+        '''Creates the new dataframe fto be used, based on random sampling, utilising the newly applied weights'''
+        random.seed(1)
+
+        random_index =[]
+        for i in range(len(self.df["weights"])):
+            random_index.append(random.random())
+        
+        new_indices = []
+        previous_val = 0
+        for i in range(len(random_index)):
+            for j in range(len(self.df["weights"])):
+                if random_index[i] < self.df["cum_sum"][j]:
+                    new_indices.append(j)
+                    break 
+        
+        new_df = pd.DataFrame(np.zeros(self.df.shape), columns = self.df.columns)
+        
+        count = 0
+        for i in  new_indices:
+            new_df.iloc[count] = self.df.iloc[i]
+            count +=1
+        
+        #del df
+        self.df = new_df
+
+
+
+
+    def dict_sum(self, df_series):
+        '''Performs a sum of the values in a dictionary'''
+        dict_val = {}
+        for n in df_series.to_list(): #counting instances of the class
+            if n in dict_val:
+                dict_val[n] +=1
+            else:
+                dict_val[n] =1
+        return dict_val
+
+
+
+    def adaboost(self):
+        '''adaboost algorithm'''
+
+        self.first = True                                      #checks whether it is the first iteration (weights = 1/n)
+        iterations = 0
+        best_weak =[]                                          #adds the best weak learnings to a list 
+        final_predictions = pd.DataFrame(self.df[self.feature_var]) #self.feature_var is the first missing variable
+
+        while iterations < self.weak_learners:
+            iterations +=1
+            print("\nIteration",iterations)
+
+            if not self.first:
+                self.update_weights(alpha, overall_errors[best_index]) 
+                self.new_df()
+                self.add_weights() 
+
+            else:
+                self.add_weights()
+
+            #training set
+            y = self.df[self.feature_var]       #applies feature var (each feature variable is the y to be predicted)
+            y_list = y.to_list()
+            X = self.df.drop(labels = [self.feature_var,"weights", "cum_sum"], axis = 1, errors = "ignore")
+            X_num = self.df[self.num_var]       #selecting multiple items        
+            X_cat = self.df[self.cat_var]    
+            
+            weak_learner = []
+            overall_errors =[]
+
+            num_var_1 = self.num_var.copy()
+            cat_var_1 = self.cat_var.copy()
+            if self.feature_var in self.num_var:
+                num_var_1.remove(self.feature_var)
+            elif self.feature_var in self.cat_var:
+                cat_var_1.remove(self.feature_var)
+
+
+            my_tree = NodeClass('n1', np.arange(len(y)))
+            model = TREE4(y, X_num, num_var_1, X_cat, cat_var_1, impurity_fn = self.impurity_fn, problem = self._problem, method = self.method, max_level = self.max_level) 
+            model.growing_tree(my_tree)
+            self.prediction_fn(model, y, X_num, num_var_1, X_cat, cat_var_1)
+            overall_errors.append(self.error_checker(model, y_list))
+            
+            if self._problem == "regression":                    
+                weak_learner.append([model.prediction_reg[:len(y)], model.get_all_node(), model.get_leaf(), model])  
+            else:
+                weak_learner.append([model.prediction_cat[:len(y)], model.get_all_node(), model.get_leaf(), model])
+
+            #not sure how this works            
+            error_metric = []
+            for error in overall_errors:
+                error_metric.append(sum(error))
+    
+            #if not pure:
+            #best = min(error_metric)
+            best_index = error_metric.index(min(error_metric))
+            colname = "pred"+str(iterations)
+            final_predictions[colname] = weak_learner[best_index][0][:len(y)]
+
+            alpha = self.alpha_calculator(overall_errors, best_index)
+            if math.isinf(alpha):
+                print("no errors")
+                break
+
+            best_weak.append([weak_learner[best_index], error_metric[best_index], alpha, overall_errors[best_index]])
+    
+            #clearing memory items
+            #del y
+            #del X_cat
+            #del X_cat_1
+            #del X_num
+            #del X_num_1
+            #del X
+            #gc.collect()
+
+        final_model =[]
+        combined_response = []
+        models = []
+        alphas = []
+        for i in best_weak:
+            final_model.append([i[-2],i[1], i[0]])
+            combined_response.append(i[0][0])
+            models.append(i[0][-1])
+            alphas.append(i[-2])
+
+        self.final_model = final_model
+        self.models = models
+        self.alphas = alphas
+
+        final_predictions = self.vote(combined_response, final_predictions,  trains = True)
+        final_e = self.final_error(y_list, final_predictions)
+
+        if self._problem == "classifier":
+            print("Final Training Missclassification", sum(final_e), "\n")
+            self.error = sum(final_e)
+        else:
+            print("Final Training MSE", round(sum(final_e),2), "\n")
+            self.error = round(sum(final_e),2)
+        
+
+        return {"final_model":final_model, "models":models, "alphas" : alphas}
+
+    def test_prediction(self, y_test, num_var, cat_var, X_test_num, X_test_cat):
+        '''Prediction function'''
+
+        test_predictions = pd.DataFrame(y_test)
+        
+        for model in self.models:
+            weak_learner_test = []
+            for j in range(len(y_test)): 
+                for node in model.get_all_node():  
+                    if node.name =="n1":
+
+                        new = []
+                        new_n = []            
+                        for name in num_var:
+                            new.append(X_test_num[name])#used to have [j] index notation, but these are signle predictions
+
+                        for n_name in cat_var:
+                            new_n.append(str(X_test_cat[n_name])) #TODO added str?        
+
+                        d = dict(zip(num_var, new))
+                        dn = dict(zip(cat_var, new_n))
+                        d.update(dn)
+        
+                        model.pred_x(node, d, model.get_all_node(), model.get_leaf()) #appending to a list in TREE4 
+            
+            if self._problem == "classifier":
+                weak_learner_test.append(model.prediction_cat[-len(y_test):]) 
+            else:
+                weak_learner_test.append(model.prediction_reg[-len(y_test):]) 
+            colname = "pred"+str(self.models.index(model))
+            test_predictions[colname] = weak_learner_test[0] #is a nested list
+
+        test_predictions = self.vote(y_test, test_predictions) #cant multiple by alpha here , need to assign it to the node, the value
+
+        print("Prediction", test_predictions["final_pred"][0] )
+
+        return test_predictions["final_pred"] 
+
+
+
+    def get_key(self, my_dict, val):
+        '''Returns the key from a dictionary value'''
+        for key, value in my_dict.items():
+            if val == value:
+                return key
+
+        return "key doesn't exist"
+
+
+
+    def vote(self,y_test, test_predictions, trains = False):
+        '''Voting mechanism for prediction selection'''
+        
+        final_pred_test = []    
+
+        #do the votes need to be weighted by the alpha value as per schapire 1999, added alpha values to come into the fn
+
+        if not trains:
+            if self._problem == "classifier":
+                for i in range(len(y_test)):
+                    votes = []
+                    for j in range(1,test_predictions.shape[1]):
+                        votes.append(test_predictions.iloc[i,j])
+                    #final_pred_test.append(max(set(votes), key = votes.count))     #takes the highest vote
+                    scaled = {}
+                    for i in range(len(votes)):
+                        if votes[i] in scaled:
+                            scaled[votes[i]] += self.alphas[i]
+                        else:
+                            scaled[votes[i]] = self.alphas[i]
+                    
+                    final_pred_test.append(self.get_key(scaled,max(scaled.values()))) #take highest alpha contribution
+            else:
+                for i in range(len(y_test)):
+                    votes = []
+                    for j in range(1,test_predictions.shape[1]):
+                        votes.append(test_predictions.iloc[i,j])
+                    #final_pred_test.append(mean(votes))       #pretty sure mean vote is right, could be mode
+                    final_pred_test.append(sum([votes[i] * self.alphas[i] for i in range(len(votes))])/ sum(self.alphas))
+        else:
+            if self._problem == "classifier":
+                for i in range(len(y_test[0])):
+                    votes = []
+                    for j in range(len(y_test)):
+                        votes.append(y_test[j][i])
+                    #final_pred_test.append(max(set(votes), key = votes.count))     #takes the highest vote
+                    scaled = {}
+                    for i in range(len(votes)):
+                        if votes[i] in scaled:
+                            scaled[votes[i]] += self.alphas[i]
+                        else:
+                            scaled[votes[i]] = self.alphas[i]
+                    
+                    final_pred_test.append(self.get_key(scaled,max(scaled.values()))) #take highest alpha contribution
+            else:
+                for i in range(len(y_test[0])):
+                    votes = []
+                    for j in range(len(y_test)):
+                        votes.append(y_test[j][i])
+                    #final_pred_test.append(mean(votes))       #pretty sure mean vote is right, could be mode
+                    final_pred_test.append(sum([votes[i] * self.alphas[i] for i in range(len(votes))])/ sum(self.alphas))
+
+
+        
+        test_predictions["final_pred"] = final_pred_test
+
+        return test_predictions
+
+
+    def  prediction_fn(self, model, y, X_num_1, num_var_1, X_cat_1, cat_var_1):
+        '''Internal prediction function, attaching the model to TREE4.pred_x'''
+        for i in range(len(y)): 
+            for node in model.get_all_node():  
+                if node.name =="n1":
+                    new = []
+                    new_n = []            
+
+                    if num_var_1:               #was checking if empty , now getting ith observation for pred
+                        for name in num_var_1:
+                            new.append(X_num_1[name][i])
+
+                    if cat_var_1:
+                        for n_name in cat_var_1:
+                            new_n.append(X_cat_1[n_name][i])        
+
+                    d = dict(zip(num_var_1, new))
+                    dn = dict(zip(cat_var_1, new_n))
+                    d.update(dn)
+                    model.pred_x(node, d, model.get_all_node(), model.get_leaf()) #no return as the values are stores in the TREE4 class 
+
+
+    def error_checker(self, model, y_list):
+        '''Checks the errors of the model'''
+        
+        errors = []
+        if model.prediction_cat or model.prediction_reg:   #an error checking line 
+            for j in range(len(y_list)):
+                if self._problem == "regression":                     #appears not fuctional, copied from cat
+                        errors.append(((y_list[j] -model.prediction_reg[j])**2 )/len(y_list))
+
+                else:
+                    if model.prediction_cat[j] != y_list[j]:
+                        errors.append(True)
+                    else:
+                        errors.append(False)
+            
+            if self._problem == "regression":
+                print("training mse", round(sum(errors),2))
+            else:
+                print("training missclassifications", sum(errors))
+            
+        else:
+            print("THERE MAY BE AN ISSUE")
+            errors = [True]*len(y_list)
+
+        return errors
+        
+
+    def alpha_calculator(self, overall_errors, best_index):
+        '''alpha calculator for the adaboost function'''
+
+        TE = 0 #total error 
+        for i in range(len(self.df["weights"])):
+            if self._problem == "classifier":
+                TE += self.df["weights"][i] * overall_errors[best_index][i] 
+            else:
+                TE += self.df["weights"][i] * overall_errors[best_index][i] / (max( overall_errors[best_index]) - min( overall_errors[best_index])) #may need a different variation for regression, needs to be probability
+
+        alpha = 0.5 * np.log ( ((1-TE) / TE) + 1e-7)
+        return alpha
+
+
+
+    def final_error(self, y_list, final_predictions):
+        '''calculate final error of the model'''
+        
+        final_miss =[]
+        if self._problem == "classifier":
+            for i in range(len(y_list)):
+                if y_list[i] != final_predictions["final_pred"][i]:
+                    final_miss.append(True)
+                else:
+                    final_miss.append(False)
+        else:
+            for i in range(len(y_list)):
+                final_miss.append(((y_list[i] - final_predictions["final_pred"][i])**2)/len(y_list))
+        return final_miss
+
+
+
+
+
+#end ADABOOST
+##################################################
+
+#start BINPI
+
+
+class BINPI:
+
+    def __init__(self,df, num_var, bin_var, class_var, weak_learners = 7):
+        self.df = df
+        self.num_var = num_var
+        self.bin_var = bin_var
+        self.class_var = class_var
+        self.weak_learners = weak_learners
+        self.cat_var = bin_var + class_var
+        
+        #def id_matrix_creator(self):
+
+        id_matrix = self.df.notna()
+        id_matrix.replace(True, "a", inplace = True)
+        id_matrix.replace(False, "b", inplace = True)
+        id_matrix.replace("a", 0, inplace = True)
+        id_matrix.replace("b", 1, inplace = True)
+        self.id_matrix = id_matrix
+        #return id_matrix
+
+
+
+    def row_vector(self):
+        '''Returns a row vector sorted by missingness for use in lexicographical_matrix'''
+        row_vect = []
+
+        for variable_name in self.id_matrix.columns:
+            row_vect.append((self.id_matrix[variable_name].sum(axis=0), variable_name ))
+
+        row_vect.sort()
+        row_name_vect = []
+
+        for i in row_vect:
+            row_name_vect.append(i[1])
+
+        return row_name_vect, row_vect
+
+
+    def condition(self, element):
+        '''Sorts list by amount of missing, and then by alphabetical order of variable name'''
+
+        return element[0], element[2]
+
+
+
+    def column_vector(self):
+        '''Returns a column vector sorted by missinness for use in lexicographical_matrix'''
+
+        column_vect = []
+        for row_number in range(self.id_matrix.shape[0]):
+            column_vect.append([self.id_matrix.iloc[row_number].sum(axis=0), row_number])
+
+        column_vect_dict = {}
+
+        for value in column_vect:
+            if value[0] in column_vect_dict:
+                column_vect_dict[value[0]] +=1
+            else:
+                column_vect_dict[value[0]] = 1
+
+        for values in column_vect:
+            if values[0] == 0:
+                values.append("NM") #for no missing
+            else:
+                position = 0
+                list_var = []
+                for variable_name in self.id_matrix.columns:
+                    position +=1
+                    if self.id_matrix.iloc[values[1], position-1] == 1:
+                        list_var.append(variable_name)
+                values.append(list_var)
+                
+        column_vect.sort(key = self.condition)
+        column_number_vect = []
+
+        for i in column_vect:
+            column_number_vect.append(i[1])
+
+        return column_number_vect, column_vect
+
+    '''
+    def rearrangement(df, row_name_vector, column_number_vector):
+
+        df2=df.reindex(columns= row_name_vector)
+        df2 = df2.reindex(column_number_vector)
+
+        return df2
+
+    '''
+    def lexicographical_matrix(self):
+        '''Returns a matrix sorted by missingness'''
+        row_name_vector, row_vect = self.row_vector()
+        column_number_vector, column_vect = self.column_vector()
+        df2 = self.df.reindex(columns= row_name_vector)
+        df2 = df2.reindex(column_number_vector)
+
+        self.column_vect = column_vect 
+        self.df2 = df2
+
+        return df2
+
+    def first_nan(self, last_nan = 0):
+        '''Finds the first nan'''
+        #if you wanted to find the maximal size when it wasnt so obvious, do it during this step, and pass column_vect 
+        skip_point = (False, 0, 0, 0)
+        row_no = last_nan                    #skip full iteration, and start with last nan only
+        
+        for pair in self.column_vect[last_nan:]:
+            if pair[0] > 0: 
+                if pair[0] >1:
+                    skip_point = (True,  pair[0], pair[1], pair[2])
+                
+                self.column_vect[row_no] = (pair[0]-1, pair[1], pair[2]) #adjust the list removing the to be imputated value
+                last_nan = row_no
+                break
+            else:
+                first = None
+            row_no +=1
+
+        return row_no, last_nan, skip_point
+
+
+
+    def matches_dict(self, column_vect):
+        '''Finds matches'''
+        dict_match = {}
+        for i in column_vect:
+            if " ".join(i[2]) in dict_match:
+                dict_match[" ".join(i[2])] +=1
+            else:
+                dict_match[" ".join(i[2])] = 1
+
+        return dict_match 
+
+
+
+    def checkNaN(self, str):
+        '''Checks for nans'''
+        try:
+            return math.isnan(float(str))
+        except:
+            return False
+        
+
+    def feature_variable(self, row_no):
+        '''Checks for the feature variable'''
+        row_no
+        pos = 0
+        feature_var = "a"
+        for value in self.df2.iloc[row_no]:
+            pos += 1
+
+            if self.checkNaN(value):            #this only looks for the first instance 
+                feature_var = self.df2.columns[pos-1]
+                break
+        return feature_var, pos
+
+
+    
+
+    def imputation_process(self, feature_var, row_no, pos, old_model="",  previous_var= "", old_adaboost = ""):
+        '''Checks for the 3 types of imputation processes '''
+        
+
+        if self.sklearn:
+            from sklearn.tree import DecisionTreeClassifier
+            from sklearn.ensemble import AdaBoostClassifier
+            from sklearn.ensemble import AdaBoostRegressor
+
+
+        complete_df = self.df2.iloc[0:row_no].copy()  #subset only the complete dataset
+        complete_df.reset_index(drop = True, inplace = True)  
+
+        y = complete_df[feature_var]
+        X = complete_df.drop(feature_var, axis = 1)
+
+        #As a temporary fix for multiple missing values, will use mean imputation for a secondary, tertiary etc missing value temporarily 
+        prediction_feat = self.df2.iloc[row_no].copy()
+        #print("prediction_feat2\n",prediction_feat)
+        prediction_feat.drop(feature_var, inplace = True)
+        
+        for series_name in X.columns:                                  
+            if self.checkNaN(prediction_feat[series_name]):
+                if series_name in self.cat_var:
+                    prediction_feat[series_name] = Counter(X[series_name][X[series_name].notna()]).most_common(1)[0][0] 
+                    #print("prediction_feat", series_name ,Counter(X[series_name][X[series_name].notna()]).most_common(1)[0][0])
+                else:
+                    prediction_feat[series_name] = round(mean(X[series_name][X[series_name].notna()]),0)
+
+
+        y_test = [1] #one element list, used for len and also for helping voting mechanism
+
+        #removing feature_var from appropiate list, before indexing
+        if feature_var in self.num_var:
+            num_var_full = self.num_var.copy()
+            num_var_1 = self.num_var.copy()
+            cat_var_1 = self.cat_var.copy()
+            num_var_1.remove(feature_var)
+
+        elif feature_var in self.cat_var:
+            num_var_full = self.num_var.copy()
+            num_var_1 = self.num_var.copy()
+            cat_var_1 = self.cat_var.copy()
+            cat_var_1.remove(feature_var) 
+        else:
+            print("Variable Error", feature_var, self.num_var, self.cat_var)
+
+        X_test_num = prediction_feat[num_var_1]  
+        X_test_cat = prediction_feat[cat_var_1] 
+        
+        imp_time_start = time.time()
+
+        if not self.sklearn:
+            if feature_var in num_var_full:
+                if feature_var != previous_var:
+                    #don't think it matters if i pass num_var_full or num_var as there is filtering later
+                    adaboost = Adaboost(df = complete_df, feature_var = feature_var, num_var= self.num_var, cat_var = self.cat_var, _problem = "regression", impurity_fn = "pearson",  method = "FAST", weak_learners = self.weak_learners , max_level = 0)
+                    model = adaboost.adaboost()  
+                    yhat = adaboost.test_prediction(y_test, num_var_1, cat_var_1, X_test_num, X_test_cat) 
+                else:
+                    yhat = old_adaboost.test_prediction(y_test, num_var_1, cat_var_1, X_test_num, X_test_cat)
+                    model = old_model
+                    adaboost = old_adaboost
+            
+            elif feature_var in self.bin_var:
+                if feature_var != previous_var:
+                    adaboost = Adaboost(df = complete_df, feature_var = feature_var, num_var= self.num_var, cat_var = self.cat_var, _problem = "classifier", impurity_fn = "tau",  method = "FAST", weak_learners = self.weak_learners , max_level = 0)
+                    model = adaboost.adaboost() 
+                    yhat = adaboost.test_prediction(y_test, num_var_1, cat_var_1, X_test_num, X_test_cat)
+                else:
+                    yhat = old_adaboost.test_prediction(y_test, num_var_1, cat_var_1, X_test_num, X_test_cat)
+                    model = old_model
+                    adaboost = old_adaboost
+
+            elif feature_var in self.class_var:
+                if feature_var != previous_var:
+                    
+                    adaboost = Adaboost(df = complete_df, feature_var = feature_var, num_var= self.num_var, cat_var = self.cat_var, _problem = "classifier", impurity_fn = "tau",  method = "FAST", weak_learners = self.weak_learners , max_level = 3)
+                    model = adaboost.adaboost()  
+                    yhat = adaboost.test_prediction(y_test, num_var_1, cat_var_1, X_test_num, X_test_cat)
+                else:
+                    yhat = old_adaboost.test_prediction(y_test, num_var_1, cat_var_1, X_test_num, X_test_cat)
+                    model = old_model
+                    adaboost = old_adaboost
+            else: 
+                print("Error, found variable missing from variable lists")
+
+        else:
+            if feature_var in self.num_var:
+                if feature_var != previous_var:
+                    adaboost = AdaBoostRegressor(random_state = 42, n_estimators = self.weak_learners)
+                    model = adaboost.fit(X.values,y.values)
+                    yhat = adaboost.predict([prediction_feat])
+                else:
+                    yhat = old_adaboost.predict([prediction_feat])
+                    model, adaboost = old_model, old_adaboost
+            
+            elif feature_var in self.bin_var:
+                if feature_var != previous_var:
+                    adaboost = AdaBoostClassifier(random_state = 42, n_estimators = self.weak_learners)
+                    model = adaboost.fit(X.values,y.values)
+                    yhat = adaboost.predict([prediction_feat])
+                else:
+                    yhat = old_adaboost.predict([prediction_feat])
+                    model, adaboost = old_model, old_adaboost
+
+            elif feature_var in self.class_var:
+                if feature_var != previous_var:
+                    adaboost = AdaBoostClassifier(estimator = DecisionTreeClassifier(max_depth = 3),  random_state = 42, n_estimators = self.weak_learners)
+                    model = adaboost.fit(X.values,y.values)
+                    yhat = adaboost.predict([prediction_feat]) 
+                else:
+                    yhat = old_adaboost.predict([prediction_feat])
+                    model, adaboost = old_model, old_adaboost
+            else: 
+                print("Error, found variable missing from variable lists")
+
+
+        #Applying the value to the dataset
+        self.df2.iloc[row_no, pos-1] = yhat[0]
+        previous_var = feature_var #used for reusing the model 
+
+        print("imp time", time.time() - imp_time_start)
+        
+        return model, previous_var, adaboost
+
+    def binpi_imputation(self, sklearn = False):
+        '''Actual imputation process'''
+
+        self.sklearn = sklearn
+
+        #Future adaption - for a dataset with no complete area, need to impute the least missing column with a simple method, mean mode, andrea frazzoni
+        dict_match = self.matches_dict(self.column_vect)
+
+        last_nan = 0
+        iteration = 0 
+        while self.df2.isna().any().any() > 0: 
+    
+            start = time.time()
+            iteration +=1
+    
+            row_no, last_nan, skip_point = self.first_nan(last_nan)       #finds first nan
+            feature_var, pos = self.feature_variable(row_no)
+
+            if skip_point[0]: #checks if can reuse model 
+
+                #feature_var, pos = feature_variable(df2, row_no)
+
+                for i in range(dict_match[" ".join(skip_point[3])]):     
+
+                    if iteration >1:
+                        model_1, previous_var_1, adaboost_1 = self.imputation_process(feature_var, row_no, pos,  old_model,  previous_var, adaboost)
+                    else:
+                        model_1, previous_var_1, adaboost_1 = self.imputation_process( feature_var, row_no, pos)
+
+                    old_model,  previous_var, adaboost =  model_1, previous_var_1, adaboost_1
+
+                    print("time", time.time() - start)
+                    iteration +=1
+
+                    if i >0:
+
+                        self.column_vect[row_no] = (skip_point[1]-1, skip_point[2], skip_point[3]) # for multi missing points, to stop it from going back in
+            
+                    row_no+=1
+                continue
+
+            #feature_var, pos = feature_variable(df2, row_no)
+
+            print("\nFeature Variable: ", feature_var, "\nMissing Values: ", self.df2.isna().sum().sum())
+
+            if iteration >1:
+                model_1, previous_var_1, adaboost_1 = self.imputation_process( feature_var, row_no, pos,  old_model,  previous_var, adaboost)
+            else:
+                model_1, previous_var_1, adaboost_1 = self.imputation_process( feature_var, row_no, pos)
+
+            old_model,  previous_var, adaboost =  model_1, previous_var_1, adaboost_1
+            print("time", time.time() - start)
+
+        return self.df2
+    
+
+#^BINPI
