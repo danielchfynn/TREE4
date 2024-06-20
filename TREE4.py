@@ -179,16 +179,22 @@ class NodeClass(NodeMixin):  # Add Node feature #MyBaseClass
         '''
         sets the global_predictability values of the node for LBT
         '''
-        if combination_split:
-            self.global_predictability = [round(gp[0],3) , round(gp[1],3)]
+        if gp:
+            if combination_split:
+                self.global_predictability = [round(gp[0],3) , round(gp[1],3)]
+            else:
+                self.global_predictability = round(gp,3) 
         else:
-            self.global_predictability = round(gp,3) 
+            self.global_predictability = gp #for the empty list case
     
     def set_local_predictability(self, varian):
         '''
         sets the loval_predictability values of the node for LBT
         '''
-        self.local_predictability = round(varian,3)
+        if varian:
+            self.local_predictability = round(varian,3)
+        else:
+            self.local_predictability = varian
 
     def set_node_prop(self,node_prop):
         '''
@@ -313,6 +319,9 @@ class TREE4:
             robjects.r("library(base, quietly = TRUE)")
             #robjects.r("suppressWarnings(install.packages('lba', quiet = TRUE))")
             robjects.r("suppressWarnings(suppressMessages(library(lba, quietly = TRUE)))")
+            if self.impurity_fn != "tau":
+                print("Impurity function changed to Tau, for the moment for simplicity")
+                self.impurity_fn = "tau"
         
         #setting the deviance in the response class pre-partitioning 
         if problem =="regression":
@@ -825,13 +834,15 @@ class TREE4:
                                 alphas.append(np.around(alpha,2).tolist())
                                 #errors.append(np.around(error,2).tolist()) #this stored the error for the lba model 
 
-                                if self.impurity_fn =="entropy":
-                                    entropy_parent = self.impur(node)
-                                    inf_gain = entropy_parent - ((len(stump[0].indexes) / len(node.indexes)) * impur0 + (len(stump[1].indexes) / len(node.indexes)) * impur1)
-                                    
-                                    between_variance.append(inf_gain)                                
-                                else:
-                                    between_variance.append((impur0) + (impur1)) 
+                                #if self.impurity_fn =="entropy":
+                                #    entropy_parent = self.impur(node)
+                                #    inf_gain = entropy_parent - ((len(stump[0].indexes) / len(node.indexes)) * impur0 + (len(stump[1].indexes) / len(node.indexes)) * impur1)
+                                #    
+                                #    between_variance.append(inf_gain)                                
+                                #else:
+                                gini_parent = self.impur(node)
+                                tau =  ((impur0 * len(stump[0].indexes) / len(node.indexes)) + (impur1 * len(stump[1].indexes)/ len(node.indexes)) - gini_parent) / (1- gini_parent)
+                                between_variance.append(tau) 
                             else:
                                 continue
                         else:
@@ -855,10 +866,12 @@ class TREE4:
                             self.nss_splits = splits
                             self.nss_between_variance = between_variance
                             self.nss_stumps = stumps    
-                            
+
                             return variables[best_index], tuple(splits[best_index]), between_variance[best_index], stumps[best_index]    #"latent_budget_tree doesnt return an error" 
                         else:
                             continue
+
+
 
             elif self.method == "FAST" or self.method == "TWO-STAGE":
                 
@@ -922,7 +935,7 @@ class TREE4:
                                 impur1 = self.impur(stump[1])
                                 if self.problem == 'classifier' and self.impurity_fn == "tau":    
                                     gini_parent = self.impur(node)
-                                    tau = (impur0 * len(stump[0].indexes) / len(node.indexes) + impur1 * len(stump[1].indexes)/ len(node.indexes) - gini_parent) / (1- gini_parent)
+                                    tau = ((impur0 * len(stump[0].indexes) / len(node.indexes)) + (impur1 * len(stump[1].indexes)/ len(node.indexes)) - gini_parent) / (1- gini_parent)
                                     between_variance_k.append(tau)
                                     between_variance.append(tau)
                                 elif self.problem == "regression" and self.impurity_fn == "pearson": 
@@ -958,7 +971,7 @@ class TREE4:
                                     impur1 = self.impur(stump[1])
                                     if self.problem == 'classifier' and self.impurity_fn == "tau":    
                                         gini_parent = self.impur(node)
-                                        tau = (impur0 * len(stump[0].indexes) / len(node.indexes) + impur1 * len(stump[1].indexes)/ len(node.indexes) - gini_parent) / (1- gini_parent)
+                                        tau =  ((impur0 * len(stump[0].indexes) / len(node.indexes)) + (impur1 * len(stump[1].indexes)/ len(node.indexes)) - gini_parent) / (1- gini_parent)
                                         between_variance_k.append(tau)
                                         between_variance.append(tau)
                                     elif self.problem == "regression" and self.impurity_fn == "pearson": 
@@ -1146,14 +1159,29 @@ class TREE4:
                 self.nss_splits = splits
                 self.nss_between_variance = between_variance
                 self.nss_stumps = stumps
+                
+                node.set_global_predictability(gp[between_variance.index(max(between_variance))])
 
                 return variables[between_variance.index(max(between_variance))],tuple(splits[between_variance.index(max(between_variance))]),between_variance[between_variance.index(max(between_variance))], stumps[between_variance.index(max(between_variance))]
+            elif self.method in ["FAST", "TWO-STAGE"]:
+
+                self.nss_variables = variables
+                self.nss_splits = splits
+                self.nss_between_variance = between_variance
+                self.nss_stumps = stumps
+
+                node.set_global_predictability(gp[between_variance.index(max(between_variance))])
+
+                return variables[between_variance.index(max(between_variance))],splits[between_variance.index(max(between_variance))],between_variance[between_variance.index(max(between_variance))], stumps[between_variance.index(max(between_variance))]
+            
             else:
 
                 self.nss_variables = variables
                 self.nss_splits = splits
                 self.nss_between_variance = between_variance
                 self.nss_stumps = stumps
+
+                
                 return variables[between_variance.index(max(between_variance))],splits[between_variance.index(max(between_variance))],between_variance[between_variance.index(max(between_variance))], stumps[between_variance.index(max(between_variance))]
         except:
             #this is mostly an error where the length is less than min size 
@@ -1567,7 +1595,7 @@ class TREE4:
             value_soglia_variance.append([value,soglia,varian,level])
             self.root.append((value_soglia_variance,rout))
 
-        node.set_local_predictability(varian) #the max(between_variance) from best_split, local predictability using the the given impurity measure
+        
 
         #recreate split from node search split 
         left_node,right_node = node.bin_split(self.features, self.n_features, str(value),soglia)
@@ -1576,6 +1604,12 @@ class TREE4:
         node.set_children((left_node,right_node))
         node.set_split(value_soglia_variance)
         mini_tree.append((node,left_node,right_node))
+
+        if self.method == "CART":
+            node.set_local_predictability(
+                1 - ((self.impur(left_node, display = True)*(len(left_node.indexes)/len(node.indexes)) + self.impur(right_node, display = True) *(len(right_node.indexes)/len(node.indexes))  )) / self.impur(node, display = True) ) 
+        else:
+            node.set_local_predictability(varian) #the max(between_variance) from best_split, local predictability using the the given impurity measure
 
         if not self.catergorise_num1:
             self.tree.append(mini_tree) 
@@ -2479,6 +2513,13 @@ class TREE4:
 
         #print("time before adding labels", time.time()- start)
 
+        #to get rid of ipr and gpr for terminal nodes
+        #for node in all_node:
+        #    if node in leaf:
+        #        node.set_local_predictability([])
+        #        node.set_global_predictability([])
+
+
         #applying labels to the nodes 
         for label in range(len(v_label)):
             for node in all_node:
@@ -2501,24 +2542,24 @@ class TREE4:
                                 class_node = response_dict
                                 myKeys = list(class_node.keys())
                                 myKeys.sort()
-                                class_node = {i: class_node[i] for i in myKeys}
+                                class_node = {int(i): class_node[i] for i in myKeys}
                             else:
                                 class_node = max(response_dict, key = response_dict.get)
                             
-                            if self.impurity_fn == "gini":
-                                v_label[label] = f"{node.name}<br>Class: {class_node}<br>{self.impurity_fn} : {round(self.impur(node, display = True),2)}<br>Samples : {len(node.indexes)}" 
+                            if self.impurity_fn in ["gini","entropy"]:
+                                v_label[label] = f"{node.name}<br>Class: {class_node}<br>Samples : {len(node.indexes)}<br>PPI : []"# {round(self.impur(node, display = True),2)}" 
                                 
                             elif self.impurity_fn == "tau":
-                                v_label[label] = f"{node.name}<br>Class: {class_node}<br>{self.impurity_fn} : None<br>Samples : {len(node.indexes)}<br>GPR: {node.global_predictability}<br>LPR: {node.local_predictability}" 
+                                v_label[label] = f"{node.name}<br>Class: {class_node}<br>Samples : {len(node.indexes)}<br>GPI: []<br>PPI: []" 
                             else:
-                                v_label[label] = f"{node.name}<br>Class: {class_node}<br>{self.impurity_fn} : {round(self.impur(node),2)}<br>Samples : {len(node.indexes)}<br>GPR: {node.global_predictability}<br>LPR: {node.local_predictability}" 
+                                v_label[label] = f"{node.name}<br>Class: {class_node}<br>Samples : {len(node.indexes)}<br>GPI: []<br>PPI: []" 
 
                         else:
                             mean_y = mean(self.y[node.indexes])
                             if self.method == "CART":
-                                v_label[label]=  f"{node.name}<br>{node.split}<br>Bin Value: {round(mean_y,2)}<br>{self.impurity_fn} : {round(self.impur(node),2)}<br>Samples : {len(node.indexes)}"
+                                v_label[label]=  f"{node.name}<br>{node.split}<br>Bin Value: {round(mean_y,2)}<br>Samples : {len(node.indexes)}<br>PPI : []"#{round(self.impur(node),2)}"
                             else:
-                                v_label[label]=  f"{node.name}<br>{node.split}<br>Bin Value: {round(mean_y,2)}<br>{self.impurity_fn} : {round(self.impur(node),2)}<br>Samples : {len(node.indexes)}<br>GPR: {node.global_predictability}<br>LPR: {node.local_predictability}"
+                                v_label[label]=  f"{node.name}<br>{node.split}<br>Bin Value: {round(mean_y,2)}<br>Samples : {len(node.indexes)}<br>GPI: []<br>PPI: []"
                     
                     #label for non leaves
                     else:
@@ -2538,22 +2579,22 @@ class TREE4:
                                 class_node = response_dict
                                 myKeys = list(class_node.keys())
                                 myKeys.sort()
-                                class_node = {i: class_node[i] for i in myKeys}
+                                class_node = {int(i): class_node[i] for i in myKeys}
                             else:
                                 class_node = max(response_dict, key = response_dict.get)
 
-                            if self.impurity_fn == "gini":
-                                v_label[label] = f"{node.name}<br>{node.split}<br>Class:{class_node}<br>{self.impurity_fn} : {round(self.impur(node, display = True),2)}<br>Samples: {len(node.indexes)}"
+                            if self.impurity_fn in ["gini","entropy"]:
+                                v_label[label] = f"{node.name}<br>{node.split}<br>Class:{class_node}<br>Samples: {len(node.indexes)}<br>PPI : {node.local_predictability}"# {round(self.impur(node, display = True),2)}"
                             elif self.impurity_fn == "tau":
-                                v_label[label] =  f"{node.name}<br>{node.split}<br>Class:{class_node}<br>{self.impurity_fn} : {round(node.value_soglia_split[0][2],2)}<br>Samples: {len(node.indexes)}<br>GPR: {node.global_predictability}<br>LPR: {node.local_predictability}" 
+                                v_label[label] =  f"{node.name}<br>{node.split}<br>Class:{class_node}<br>Samples: {len(node.indexes)}<br>GPI: {node.global_predictability}<br>PPI: {node.local_predictability}" 
                             else:
-                                v_label[label] = f"{node.name}<br>{node.split}<br>Class:{class_node}<br>{self.impurity_fn} : {round(self.impur(node),2)}<br>Samples: {len(node.indexes)}<br>GPR: {node.global_predictability}<br>LPR: {node.local_predictability}"
+                                v_label[label] = f"{node.name}<br>{node.split}<br>Class:{class_node}<br>Samples: {len(node.indexes)}<br>GPI: {node.global_predictability}<br>PPI: {node.local_predictability}"
                         else:
                             mean_y = mean(self.y[node.indexes])
                             if self.method == "CART":
-                                v_label[label]=  f"{node.name}<br>{node.split}<br>Bin Value: {round(mean_y,2)}<br>{self.impurity_fn} : {round(self.impur(node),2)}<br>Samples : {len(node.indexes)}"
+                                v_label[label]=  f"{node.name}<br>{node.split}<br>Bin Value: {round(mean_y,2)}<br>Samples : {len(node.indexes)}<br>PPI : {node.local_predictability}"#{round(self.impur(node),2)}"
                             else:
-                                v_label[label]=  f"{node.name}<br>{node.split}<br>Bin Value: {round(mean_y,2)}<br>{self.impurity_fn} : {round(self.impur(node),2)}<br>Samples : {len(node.indexes)}<br>GPR: {node.global_predictability}<br>LPR: {node.local_predictability}"
+                                v_label[label]=  f"{node.name}<br>{node.split}<br>Bin Value: {round(mean_y,2)}<br>Samples : {len(node.indexes)}<br>GPI: {node.global_predictability}<br>PPI: {node.local_predictability}"
         #print("time after labels", time.time()-start)
 
         labels = v_label
